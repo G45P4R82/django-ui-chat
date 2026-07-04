@@ -56,6 +56,7 @@ class AIProvider:
         
         if chat_history:
             for chat in chat_history[-10:]:
+                # Evita enviar o texto bruto HTML ou strings quebradas. Pega a resposta bruta que está no banco de dados.
                 full_prompt += f"Usuário: {chat.message}\nAssistente: {chat.response}\n\n"
                 
         full_prompt += f"Usuário: {prompt}\nAssistente:"
