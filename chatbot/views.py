@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
 import os
+import requests
 from google import genai
 
 from django.contrib import auth
@@ -10,31 +11,73 @@ from .models import Chat, Conversation
 
 from django.utils import timezone
 
-def ask_gemini_title(bot_response):
-    try:
-        api_key = os.environ.get("GEMINI_API_KEY_2") or os.environ.get("GEMINI_API_KEY_3")
-        client = genai.Client(api_key=api_key)
-        prompt = f"Crie um título muito curto (máximo 4 palavras) que resuma este texto: '{bot_response}'"
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt,
-        )
-        return response.text.strip().replace('"', '').replace("'", "")
-    except Exception:
-        return "Nova Conversa"
+class AIProvider:
+    """Gerencia chamadas para diferentes APIs de IA com sistema de fallback"""
+    
+    @classmethod
+    def _call_custom_api(cls, prompt, system_msg=None):
+        """Tenta chamar a API Customizada (ex: Groq)"""
+        # Pega das variáveis de ambiente. Se não existir, falhará (o que acionará o fallback pro Gemini)
+        url = os.environ.get("CUSTOM_API_URL", "https://api.groq.com/openai/v1/chat/completions")
+        token = os.environ.get("CUSTOM_API_TOKEN")
+        model = os.environ.get("CUSTOM_API_MODEL", "llama3-8b-8192") # Exemplo de modelo do Groq
+        
+        if not token:
+            raise ValueError("Token da Custom API ausente.")
 
-def ask_gemini(message):
-    try:
-        # Tenta usar a chave 2 que verificamos ser válida
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}"
+        }
+        
+        messages = []
+        if system_msg:
+            messages.append({"role": "system", "content": system_msg})
+        messages.append({"role": "user", "content": prompt})
+
+        response = requests.post(url, headers=headers, json={"model": model, "messages": messages}, timeout=10)
+        response.raise_for_status()
+        return response.json()['choices'][0]['message']['content'].strip()
+
+    @classmethod
+    def _call_gemini(cls, prompt, system_msg=None):
+        """Fallback para o Gemini"""
         api_key = os.environ.get("GEMINI_API_KEY_2") or os.environ.get("GEMINI_API_KEY_3")
         client = genai.Client(api_key=api_key)
+        
+        full_prompt = f"[{system_msg}]\n\n{prompt}" if system_msg else prompt
+        
         response = client.models.generate_content(
             model='gemini-2.5-flash',
-            contents=message,
+            contents=full_prompt,
         )
         return response.text.strip()
-    except Exception as e:
-        return f"Error connecting to Gemini: {str(e)}"
+
+    @classmethod
+    def generate_response(cls, prompt, system_msg=None):
+        """Tenta API Principal, faz fallback pro Gemini se falhar"""
+        try:
+            return cls._call_custom_api(prompt, system_msg)
+        except Exception as e:
+            print(f"[AI Fallback] Custom API falhou ({e}). Tentando Gemini...")
+            try:
+                return cls._call_gemini(prompt, system_msg)
+            except Exception as gemini_e:
+                return f"Erro fatal em todos os provedores de IA: {str(gemini_e)}"
+
+
+def ask_gemini_title(bot_response):
+    system_prompt = "Você é um classificador. Responda APENAS com o título solicitado, sem aspas e sem formatação."
+    user_prompt = f"Crie um título muito curto (máximo 4 palavras) que resuma este texto: '{bot_response}'"
+    title = AIProvider.generate_response(user_prompt, system_prompt)
+    
+    if "Erro fatal" in title:
+        return "Nova Conversa"
+    return title.replace('"', '').replace("'", "")
+
+def ask_gemini(message):
+    system_prompt = "Você é o assistente oficial e inteligente do Governo do Estado de Mato Grosso. Seja educado, prestativo e forneça informações governamentais quando necessário."
+    return AIProvider.generate_response(message, system_prompt)
 
 # Create your views here.
 @login_required(login_url='login')
