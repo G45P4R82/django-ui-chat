@@ -3,11 +3,19 @@
 {% block title %}Create Account - AI Chatbot{% endblock %}
 
 {% block content %}
+<!-- Botão Toggle fora do form -->
+<div class="absolute top-4 right-4">
+  <button onclick="toggleDarkMode()" class="w-10 h-10 flex items-center justify-center bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-300 rounded-lg shadow-sm transition-colors">
+    <i class="fa-solid fa-moon dark:hidden"></i>
+    <i class="fa-solid fa-sun hidden dark:block text-yellow-400"></i>
+  </button>
+</div>
+
 <div class="flex min-h-screen items-center justify-center p-4 my-8">
-  <div class="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
+  <div class="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl shadow-xl overflow-hidden border border-gray-100 dark:border-gray-700 transition-colors">
     
     <div class="bg-brand-600 px-8 py-6 text-center">
-      <div class="w-14 h-14 bg-white rounded-full flex items-center justify-center text-brand-600 text-2xl mx-auto mb-3 shadow-lg">
+      <div class="w-14 h-14 bg-white dark:bg-gray-900 rounded-full flex items-center justify-center text-brand-600 dark:text-brand-400 text-2xl mx-auto mb-3 shadow-lg">
         <i class="fa-solid fa-user-plus"></i>
       </div>
       <h2 class="text-2xl font-bold text-white mb-1">Create Account</h2>
@@ -16,7 +24,7 @@
 
     <div class="px-8 py-6">
       {% if error_message %}
-        <div class="bg-red-50 text-red-600 p-4 rounded-xl mb-6 flex items-start gap-3 border border-red-100 text-sm font-medium">
+        <div class="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 p-4 rounded-xl mb-6 flex items-start gap-3 border border-red-100 dark:border-red-800 text-sm font-medium">
           <i class="fa-solid fa-circle-exclamation mt-0.5"></i>
           {{ error_message }}
         </div>
@@ -26,46 +34,46 @@
         {% csrf_token %}
         
         <div>
-          <label for="username" class="block text-sm font-bold text-gray-700 mb-1.5">Username</label>
+          <label for="username" class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1.5">Username</label>
           <div class="relative">
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
               <i class="fa-solid fa-user"></i>
             </div>
             <input type="text" id="username" name="username" required
-              class="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all text-gray-800 placeholder-gray-400" placeholder="Choose a username">
+              class="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500" placeholder="Choose a username">
           </div>
         </div>
 
         <div>
-          <label for="email" class="block text-sm font-bold text-gray-700 mb-1.5">Email Address</label>
+          <label for="email" class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1.5">Email Address</label>
           <div class="relative">
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
               <i class="fa-solid fa-envelope"></i>
             </div>
             <input type="email" id="email" name="email" required
-              class="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all text-gray-800 placeholder-gray-400" placeholder="you@example.com">
+              class="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500" placeholder="you@example.com">
           </div>
         </div>
         
         <div>
-          <label for="password1" class="block text-sm font-bold text-gray-700 mb-1.5">Password</label>
+          <label for="password1" class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1.5">Password</label>
           <div class="relative">
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
               <i class="fa-solid fa-lock"></i>
             </div>
             <input type="password" id="password1" name="password1" required
-              class="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all text-gray-800 placeholder-gray-400" placeholder="Create a password">
+              class="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500" placeholder="Create a password">
           </div>
         </div>
 
         <div>
-          <label for="password2" class="block text-sm font-bold text-gray-700 mb-1.5">Confirm Password</label>
+          <label for="password2" class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1.5">Confirm Password</label>
           <div class="relative">
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
               <i class="fa-solid fa-lock-open"></i>
             </div>
             <input type="password" id="password2" name="password2" required
-              class="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all text-gray-800 placeholder-gray-400" placeholder="Repeat your password">
+              class="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500" placeholder="Repeat your password">
           </div>
         </div>
         
@@ -77,10 +85,10 @@
       </form>
     </div>
     
-    <div class="bg-gray-50 px-8 py-4 text-center border-t border-gray-100">
-      <p class="text-sm text-gray-600">
+    <div class="bg-gray-50 dark:bg-gray-900 px-8 py-4 text-center border-t border-gray-100 dark:border-gray-700 transition-colors">
+      <p class="text-sm text-gray-600 dark:text-gray-400">
         Already have an account? 
-        <a href="login" class="font-bold text-brand-600 hover:text-brand-800 hover:underline transition-colors">Sign in here</a>
+        <a href="login" class="font-bold text-brand-600 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-300 hover:underline transition-colors">Sign in here</a>
       </p>
     </div>
 

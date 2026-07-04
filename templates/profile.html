@@ -3,15 +3,21 @@
 {% block title %}Perfil - Governadoria{% endblock %}
 
 {% block content %}
-<div class="flex h-screen bg-gray-50">
+<div class="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
 
   <!-- Sidebar Lateral (Simplificada para a tela de Perfil) -->
   <aside class="w-72 bg-gray-900 text-gray-300 flex-col transition-all duration-300 hidden md:flex border-r border-gray-800">
-    <div class="p-4 flex items-center gap-3 mt-2">
-      <div class="w-8 h-8 rounded-full bg-white text-gray-900 flex items-center justify-center font-bold">
-        <i class="fa-solid fa-robot"></i>
+    <div class="p-4 flex items-center justify-between mt-2">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-full bg-white text-gray-900 flex items-center justify-center font-bold">
+          <i class="fa-solid fa-robot"></i>
+        </div>
+        <span class="font-bold text-white text-lg">Governadoria</span>
       </div>
-      <span class="font-bold text-white text-lg">Governadoria</span>
+      <button onclick="toggleDarkMode()" title="Alternar Tema Escuro" class="w-8 h-8 flex items-center justify-center border border-gray-700 hover:bg-gray-800 text-gray-300 rounded-lg transition-colors">
+        <i class="fa-solid fa-moon dark:hidden"></i>
+        <i class="fa-solid fa-sun hidden dark:block text-yellow-400"></i>
+      </button>
     </div>
 
     <div class="px-4 py-3">
@@ -23,69 +29,75 @@
   </aside>
 
   <!-- Content -->
-  <main class="flex-1 flex justify-center py-12 px-4 sm:px-6 lg:px-8 bg-white overflow-y-auto">
+  <main class="flex-1 flex justify-center py-12 px-4 sm:px-6 lg:px-8 bg-white dark:bg-gray-800 overflow-y-auto transition-colors">
     
-    <div class="max-w-2xl w-full space-y-8">
+    <div class="max-w-2xl w-full space-y-8 relative">
+      <!-- Botão toggle mobile -->
+      <button onclick="toggleDarkMode()" class="md:hidden absolute right-0 top-0 w-10 h-10 flex items-center justify-center border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-300 rounded-lg transition-colors">
+        <i class="fa-solid fa-moon dark:hidden"></i>
+        <i class="fa-solid fa-sun hidden dark:block text-yellow-400"></i>
+      </button>
+
       <div>
-        <div class="flex items-center gap-4 mb-8 border-b pb-4">
-          <a href="{% url 'chatbot' %}" class="md:hidden text-gray-400 hover:text-gray-600">
+        <div class="flex items-center gap-4 mb-8 border-b dark:border-gray-700 pb-4">
+          <a href="{% url 'chatbot' %}" class="md:hidden text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
             <i class="fa-solid fa-arrow-left text-xl"></i>
           </a>
-          <h2 class="text-3xl font-extrabold text-gray-900">Meu Perfil</h2>
+          <h2 class="text-3xl font-extrabold text-gray-900 dark:text-gray-100">Meu Perfil</h2>
         </div>
       </div>
 
-      <div class="bg-white shadow overflow-hidden sm:rounded-lg border border-gray-200">
-        <div class="px-4 py-5 sm:px-6 flex items-center gap-4 bg-gray-50">
+      <div class="bg-white dark:bg-gray-900 shadow overflow-hidden sm:rounded-lg border border-gray-200 dark:border-gray-700 transition-colors">
+        <div class="px-4 py-5 sm:px-6 flex items-center gap-4 bg-gray-50 dark:bg-gray-800">
           <div class="w-16 h-16 rounded-full bg-brand-600 text-white flex items-center justify-center text-2xl font-bold shadow-md">
             {{ user.username|make_list|first|upper }}
           </div>
           <div>
-            <h3 class="text-lg leading-6 font-medium text-gray-900">
+            <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-gray-100">
               Informações da Conta
             </h3>
-            <p class="mt-1 max-w-2xl text-sm text-gray-500">
+            <p class="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">
               Detalhes pessoais e configurações.
             </p>
           </div>
         </div>
-        <div class="border-t border-gray-200">
+        <div class="border-t border-gray-200 dark:border-gray-700">
           <dl>
-            <div class="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-              <dt class="text-sm font-medium text-gray-500 flex items-center gap-2">
+            <div class="bg-white dark:bg-gray-900 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+              <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-2">
                 <i class="fa-solid fa-user w-4"></i> Nome de Usuário
               </dt>
-              <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2 font-semibold">
+              <dd class="mt-1 text-sm text-gray-900 dark:text-gray-100 sm:mt-0 sm:col-span-2 font-semibold">
                 {{ user.username }}
               </dd>
             </div>
-            <div class="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6 border-t border-gray-100">
-              <dt class="text-sm font-medium text-gray-500 flex items-center gap-2">
+            <div class="bg-gray-50 dark:bg-gray-800/50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6 border-t border-gray-100 dark:border-gray-800">
+              <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-2">
                 <i class="fa-solid fa-envelope w-4"></i> E-mail
               </dt>
-              <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+              <dd class="mt-1 text-sm text-gray-900 dark:text-gray-100 sm:mt-0 sm:col-span-2">
                 {% if user.email %}{{ user.email }}{% else %}Não cadastrado{% endif %}
               </dd>
             </div>
-            <div class="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6 border-t border-gray-100">
-              <dt class="text-sm font-medium text-gray-500 flex items-center gap-2">
+            <div class="bg-white dark:bg-gray-900 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6 border-t border-gray-100 dark:border-gray-800">
+              <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-2">
                 <i class="fa-solid fa-calendar w-4"></i> Conta criada em
               </dt>
-              <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+              <dd class="mt-1 text-sm text-gray-900 dark:text-gray-100 sm:mt-0 sm:col-span-2">
                 {{ user.date_joined|date:"d de F de Y" }}
               </dd>
             </div>
-            <div class="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6 border-t border-gray-100">
-              <dt class="text-sm font-medium text-gray-500 flex items-center gap-2">
+            <div class="bg-gray-50 dark:bg-gray-800/50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6 border-t border-gray-100 dark:border-gray-800">
+              <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-2">
                 <i class="fa-solid fa-check-circle w-4"></i> Status
               </dt>
-              <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+              <dd class="mt-1 text-sm text-gray-900 dark:text-gray-100 sm:mt-0 sm:col-span-2">
                 {% if user.is_active %}
-                  <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                  <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
                     Ativo
                   </span>
                 {% else %}
-                  <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                  <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
                     Inativo
                   </span>
                 {% endif %}
@@ -96,7 +108,7 @@
       </div>
       
       <div class="flex justify-end pt-4">
-        <a href="{% url 'logout' %}" class="bg-red-50 hover:bg-red-100 text-red-600 font-medium py-2 px-4 border border-red-200 rounded-lg transition-colors flex items-center gap-2">
+        <a href="{% url 'logout' %}" class="bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 font-medium py-2 px-4 border border-red-200 dark:border-red-800 rounded-lg transition-colors flex items-center gap-2">
           <i class="fa-solid fa-arrow-right-from-bracket"></i> Encerrar Sessão
         </a>
       </div>

@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script>
       tailwind.config = {
+        darkMode: 'class',
         theme: {
           extend: {
             colors: {
@@ -23,10 +24,31 @@
         }
       }
     </script>
+    <!-- Script para carregar o tema antes de renderizar (evita flash branco) -->
+    <script>
+      if (localStorage.getItem('color-theme') === 'dark' || (!('color-theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.classList.add('dark');
+      } else {
+          document.documentElement.classList.remove('dark')
+      }
+    </script>
     {% block styles %}{% endblock %}
   </head>
-  <body class="bg-gray-50 h-screen flex flex-col font-sans text-gray-800">
+  <body class="bg-gray-50 dark:bg-gray-900 h-screen flex flex-col font-sans text-gray-800 dark:text-gray-200 transition-colors duration-200">
     {% block content %}{% endblock %}
+    
+    <!-- Script global para função de alternância -->
+    <script>
+      function toggleDarkMode() {
+          if (document.documentElement.classList.contains('dark')) {
+              document.documentElement.classList.remove('dark');
+              localStorage.setItem('color-theme', 'light');
+          } else {
+              document.documentElement.classList.add('dark');
+              localStorage.setItem('color-theme', 'dark');
+          }
+      }
+    </script>
     {% block scripts %}{% endblock %}
   </body>
 </html>
