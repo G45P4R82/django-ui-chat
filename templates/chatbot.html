@@ -1,0 +1,362 @@
+{% extends 'base.html' %}
+
+{% block title %}Chatbot - Governadoria{% endblock %}
+
+{% block styles %}
+<style>
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent; 
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #cbd5e1; 
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8; 
+  }
+  
+  /* Sidebar scrollbar (dark) */
+  .sidebar-scroll::-webkit-scrollbar-thumb {
+    background: #475569;
+  }
+  .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="flex h-screen bg-white overflow-hidden">
+  
+  <!-- Sidebar -->
+  <aside id="sidebar" class="w-72 bg-gray-900 text-gray-300 flex flex-col transition-all duration-300 fixed inset-y-0 left-0 z-20 md:relative transform -translate-x-full md:translate-x-0">
+    <!-- Novo Chat Btn -->
+    <div class="p-3 mt-2">
+      <a href="{% url 'chatbot' %}" class="flex items-center gap-3 w-full border border-gray-700 hover:bg-gray-800 text-white rounded-lg px-3 py-3 transition-colors">
+        <i class="fa-solid fa-plus text-sm"></i>
+        <span class="font-medium text-sm">Nova Conversa</span>
+      </a>
+    </div>
+
+    <!-- Histórico de Conversas -->
+    <div class="flex-1 overflow-y-auto sidebar-scroll px-3 py-2">
+      <div class="text-xs font-semibold text-gray-500 mb-3 px-2 mt-4 uppercase tracking-wider">Histórico Recente</div>
+      <div class="flex flex-col gap-1">
+        {% for conv in conversations %}
+          <a href="{% url 'chatbot_conversation' conv.id %}" class="flex items-center gap-3 w-full rounded-lg px-3 py-3 text-sm transition-colors {% if active_conversation and active_conversation.id == conv.id %}bg-gray-800 text-white{% else %}hover:bg-gray-800 text-gray-300 hover:text-white{% endif %}">
+            <i class="fa-regular fa-message text-gray-400"></i>
+            <span class="truncate flex-1 text-left">{{ conv.title }}</span>
+          </a>
+        {% empty %}
+          <div class="text-gray-500 text-xs px-2 py-4 italic text-center">Nenhuma conversa ainda.</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Perfil Rodapé -->
+    <div class="border-t border-gray-800 p-3">
+      <a href="{% url 'profile' %}" class="flex items-center gap-3 w-full hover:bg-gray-800 rounded-lg px-3 py-3 transition-colors group">
+        <div class="w-8 h-8 rounded-full bg-brand-600 text-white flex items-center justify-center text-sm font-bold">
+          {{ user.username|make_list|first|upper }}
+        </div>
+        <div class="flex-1 text-left">
+          <div class="text-sm font-medium text-white">{{ user.username }}</div>
+          <div class="text-xs text-gray-500 group-hover:text-gray-400">Meu Perfil</div>
+        </div>
+      </a>
+    </div>
+  </aside>
+
+  <!-- Overlay para mobile -->
+  <div id="sidebar-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-50 z-10 hidden md:hidden" onclick="toggleSidebar()"></div>
+
+  <!-- Área Principal do Chat -->
+  <main class="flex-1 flex flex-col h-screen relative w-full">
+    
+    <!-- Header Principal -->
+    <header class="bg-white border-b border-gray-200 px-4 py-3 flex justify-between items-center z-10">
+      <div class="flex items-center gap-3">
+        <button onclick="toggleSidebar()" class="md:hidden text-gray-500 hover:text-gray-700 p-2 rounded-md hover:bg-gray-100">
+          <i class="fa-solid fa-bars text-xl"></i>
+        </button>
+        <div class="w-8 h-8 md:hidden bg-brand-600 rounded-full flex items-center justify-center text-white text-sm shadow-sm">
+          <i class="fa-solid fa-robot"></i>
+        </div>
+        <div>
+          <h1 class="text-lg md:text-xl font-bold leading-tight text-gray-800">Governadoria</h1>
+          <p class="text-gray-500 text-xs hidden md:block">Governo do Estado de Mato Grosso</p>
+        </div>
+      </div>
+    </header>
+
+    <!-- Chat View -->
+    <div class="flex-1 overflow-y-auto p-4 md:p-6 bg-white flex flex-col gap-6 messages-list" id="chat-messages">
+      
+      <!-- Se for um chat novo (sem histórico) -->
+      {% if not chats %}
+      <div class="flex flex-col items-center justify-center h-full max-w-md mx-auto text-center animate-fade-in-up">
+        <div class="w-16 h-16 bg-gray-50 rounded-full border border-gray-100 flex items-center justify-center text-brand-600 text-3xl mb-4 shadow-sm">
+          <i class="fa-solid fa-robot"></i>
+        </div>
+        <h3 class="text-2xl font-semibold text-gray-800 mb-2">Como posso ajudar hoje?</h3>
+        <p class="text-gray-500 text-sm mb-8">Faça perguntas, peça análises ou solicite informações para o assistente oficial do estado.</p>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
+          <button onclick="document.querySelector('.message-input').value='Quais são as principais metas do governo atual?'; document.querySelector('.message-input').focus();" class="text-left bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl p-3 text-sm text-gray-700 transition-colors">
+            <span class="font-semibold block text-gray-800 mb-1">Principais Metas</span>
+            Quais são as principais metas do governo atual?
+          </button>
+          <button onclick="document.querySelector('.message-input').value='Me ajude a redigir um ofício padrão.'; document.querySelector('.message-input').focus();" class="text-left bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl p-3 text-sm text-gray-700 transition-colors">
+            <span class="font-semibold block text-gray-800 mb-1">Redigir Ofício</span>
+            Me ajude a redigir um ofício padrão.
+          </button>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Histórico de Mensagens -->
+      {% for chat in chats %}
+        
+        <!-- User Message -->
+        <div class="flex justify-end w-full max-w-3xl mx-auto">
+          <div class="max-w-[85%] bg-gray-100 text-gray-800 rounded-2xl px-5 py-3 border border-gray-200">
+            <div class="text-[15px] leading-relaxed break-words whitespace-pre-wrap">{{chat.message}}</div>
+          </div>
+        </div>
+
+        <!-- Bot Message -->
+        <div class="flex justify-start w-full max-w-3xl mx-auto mt-2">
+          <div class="flex gap-4 w-full">
+            <div class="w-8 h-8 rounded-full bg-brand-600 flex-shrink-0 flex items-center justify-center text-white text-sm shadow-sm mt-0.5">
+              <i class="fa-solid fa-robot"></i>
+            </div>
+            <div class="text-gray-800 max-w-full overflow-hidden">
+              <div class="font-semibold text-sm mb-1">Governadoria</div>
+              <div class="text-[15px] leading-relaxed break-words whitespace-pre-wrap">{{chat.response}}</div>
+            </div>
+          </div>
+        </div>
+        
+      {% endfor %}
+    </div>
+
+    <!-- Input Area -->
+    <div class="bg-white px-4 py-4 md:py-6">
+      <div class="max-w-3xl mx-auto relative">
+        <form class="message-form flex gap-2 relative bg-white border border-gray-300 rounded-2xl shadow-sm focus-within:ring-1 focus-within:ring-gray-300 focus-within:border-gray-400 transition-all">
+          {%csrf_token%}
+          <input type="hidden" id="conversation_id" value="{% if active_conversation %}{{ active_conversation.id }}{% endif %}">
+          
+          <textarea 
+            class="message-input w-full bg-transparent text-gray-800 rounded-2xl pl-4 pr-14 py-3 focus:outline-none resize-none min-h-[52px] max-h-48" 
+            placeholder="Mensagem para Governadoria..." 
+            rows="1"
+            required></textarea>
+            
+          <div class="absolute right-2 bottom-1.5 flex items-center">
+            <button type="submit" class="btn-send bg-brand-600 hover:bg-brand-700 text-white rounded-xl w-9 h-9 flex items-center justify-center transition-all active:scale-95 disabled:bg-gray-300 disabled:cursor-not-allowed">
+              <i class="fa-solid fa-arrow-up"></i>
+            </button>
+          </div>
+        </form>
+        <div class="text-center text-xs text-gray-400 mt-3">
+          A IA pode cometer erros. Verifique informações importantes.
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    
+    if (sidebar.classList.contains('-translate-x-full')) {
+      sidebar.classList.remove('-translate-x-full');
+      overlay.classList.remove('hidden');
+    } else {
+      sidebar.classList.add('-translate-x-full');
+      overlay.classList.add('hidden');
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const messagesList = document.querySelector('.messages-list');
+    const messageForm = document.querySelector('.message-form');
+    const messageInput = document.querySelector('.message-input');
+    const sendButton = document.querySelector('.btn-send');
+    const convIdInput = document.getElementById('conversation_id');
+
+    // Auto-scroll to bottom
+    const scrollToBottom = () => {
+      messagesList.scrollTop = messagesList.scrollHeight;
+    };
+    scrollToBottom();
+
+    // Auto-resize textarea
+    messageInput.addEventListener('input', function() {
+      this.style.height = '52px';
+      let scrollH = this.scrollHeight;
+      if (scrollH > 200) scrollH = 200; // max-height approach
+      this.style.height = scrollH + 'px';
+    });
+
+    // Submit on Enter (but allow Shift+Enter for new line)
+    messageInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        messageForm.dispatchEvent(new Event('submit'));
+      }
+    });
+
+    messageForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+
+      const message = messageInput.value.trim();
+      if (message.length === 0) return;
+
+      // Remove welcome screen if it's the first message
+      const welcomeScreen = document.querySelector('.animate-fade-in-up');
+      if (welcomeScreen && welcomeScreen.parentElement === messagesList) {
+        welcomeScreen.remove();
+      }
+
+      // Disable input while sending
+      messageInput.disabled = true;
+      sendButton.disabled = true;
+      sendButton.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin text-sm"></i>';
+
+      // 1. Add User Message
+      const userMessageDiv = document.createElement('div');
+      userMessageDiv.className = 'flex justify-end w-full max-w-3xl mx-auto mb-6';
+      userMessageDiv.innerHTML = `
+        <div class="max-w-[85%] bg-gray-100 text-gray-800 rounded-2xl px-5 py-3 border border-gray-200">
+          <div class="text-[15px] leading-relaxed break-words whitespace-pre-wrap">${message.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+        </div>
+      `;
+      messagesList.appendChild(userMessageDiv);
+
+      // Reset input
+      messageInput.value = '';
+      messageInput.style.height = '52px';
+      scrollToBottom();
+
+      // Show typing indicator
+      const typingDiv = document.createElement('div');
+      typingDiv.className = 'flex justify-start w-full max-w-3xl mx-auto mt-2 typing-indicator mb-6';
+      typingDiv.innerHTML = `
+        <div class="flex gap-4 w-full">
+          <div class="w-8 h-8 rounded-full bg-brand-600 flex-shrink-0 flex items-center justify-center text-white text-sm shadow-sm mt-0.5">
+            <i class="fa-solid fa-robot"></i>
+          </div>
+          <div class="text-gray-800 max-w-full">
+            <div class="font-semibold text-sm mb-1">Governadoria</div>
+            <div class="flex items-center gap-1 mt-2">
+              <div class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
+              <div class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
+              <div class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
+            </div>
+          </div>
+        </div>
+      `;
+      messagesList.appendChild(typingDiv);
+      scrollToBottom();
+
+      // Body params
+      const params = new URLSearchParams({
+        'csrfmiddlewaretoken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+        'message': message
+      });
+      
+      const currentConvId = convIdInput.value;
+      if (currentConvId) {
+        params.append('conversation_id', currentConvId);
+      }
+
+      // Make API Request
+      fetch("{% url 'chatbot' %}", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params
+      })
+      .then(response => response.json())
+      .then(data => {
+        // Remove typing indicator
+        const indicator = document.querySelector('.typing-indicator');
+        if (indicator) indicator.remove();
+
+        const response = data.response;
+        
+        // 2. Add Bot Message
+        const botMessageDiv = document.createElement('div');
+        botMessageDiv.className = 'flex justify-start w-full max-w-3xl mx-auto mt-2 mb-6';
+        botMessageDiv.innerHTML = `
+          <div class="flex gap-4 w-full">
+            <div class="w-8 h-8 rounded-full bg-brand-600 flex-shrink-0 flex items-center justify-center text-white text-sm shadow-sm mt-0.5">
+              <i class="fa-solid fa-robot"></i>
+            </div>
+            <div class="text-gray-800 max-w-full overflow-hidden">
+              <div class="font-semibold text-sm mb-1">Governadoria</div>
+              <div class="text-[15px] leading-relaxed break-words whitespace-pre-wrap">${response.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+            </div>
+          </div>
+        `;
+        messagesList.appendChild(botMessageDiv);
+        
+        // Se for uma nova conversa, atualiza o ID para os próximos requests e a URL
+        if (data.is_new && data.conversation_id) {
+          convIdInput.value = data.conversation_id;
+          window.history.pushState({}, '', `/c/${data.conversation_id}/`);
+          
+          // Add to sidebar (optional visually, or just reload sidebar)
+          // To keep it simple, we just let the URL handle the current state
+          // A full reload might be better to see the new AI title in the sidebar
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000); // Reload after 1s so user can read the response briefly
+        }
+
+        // Re-enable input
+        messageInput.disabled = false;
+        sendButton.disabled = false;
+        sendButton.innerHTML = '<i class="fa-solid fa-arrow-up"></i>';
+        messageInput.focus();
+        scrollToBottom();
+      })
+      .catch(error => {
+        const indicator = document.querySelector('.typing-indicator');
+        if (indicator) indicator.remove();
+        
+        messageInput.disabled = false;
+        sendButton.disabled = false;
+        sendButton.innerHTML = '<i class="fa-solid fa-arrow-up"></i>';
+        alert('Ocorreu um erro ao conectar. Tente novamente.');
+      });
+    });
+  });
+</script>
+
+<style>
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 10px, 0);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+  .animate-fade-in-up {
+    animation: fadeInUp 0.4s ease-out forwards;
+  }
+</style>
+{% endblock %}

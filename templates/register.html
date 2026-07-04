@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+
+{% block title %}Create Account - AI Chatbot{% endblock %}
+
+{% block content %}
+<div class="flex min-h-screen items-center justify-center p-4 my-8">
+  <div class="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
+    
+    <div class="bg-brand-600 px-8 py-6 text-center">
+      <div class="w-14 h-14 bg-white rounded-full flex items-center justify-center text-brand-600 text-2xl mx-auto mb-3 shadow-lg">
+        <i class="fa-solid fa-user-plus"></i>
+      </div>
+      <h2 class="text-2xl font-bold text-white mb-1">Create Account</h2>
+      <p class="text-brand-100 text-sm">Join to start chatting with AI</p>
+    </div>
+
+    <div class="px-8 py-6">
+      {% if error_message %}
+        <div class="bg-red-50 text-red-600 p-4 rounded-xl mb-6 flex items-start gap-3 border border-red-100 text-sm font-medium">
+          <i class="fa-solid fa-circle-exclamation mt-0.5"></i>
+          {{ error_message }}
+        </div>
+      {% endif %}
+
+      <form method="post" class="space-y-4">
+        {% csrf_token %}
+        
+        <div>
+          <label for="username" class="block text-sm font-bold text-gray-700 mb-1.5">Username</label>
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+              <i class="fa-solid fa-user"></i>
+            </div>
+            <input type="text" id="username" name="username" required
+              class="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all text-gray-800 placeholder-gray-400" placeholder="Choose a username">
+          </div>
+        </div>
+
+        <div>
+          <label for="email" class="block text-sm font-bold text-gray-700 mb-1.5">Email Address</label>
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+              <i class="fa-solid fa-envelope"></i>
+            </div>
+            <input type="email" id="email" name="email" required
+              class="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all text-gray-800 placeholder-gray-400" placeholder="you@example.com">
+          </div>
+        </div>
+        
+        <div>
+          <label for="password1" class="block text-sm font-bold text-gray-700 mb-1.5">Password</label>
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+              <i class="fa-solid fa-lock"></i>
+            </div>
+            <input type="password" id="password1" name="password1" required
+              class="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all text-gray-800 placeholder-gray-400" placeholder="Create a password">
+          </div>
+        </div>
+
+        <div>
+          <label for="password2" class="block text-sm font-bold text-gray-700 mb-1.5">Confirm Password</label>
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+              <i class="fa-solid fa-lock-open"></i>
+            </div>
+            <input type="password" id="password2" name="password2" required
+              class="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all text-gray-800 placeholder-gray-400" placeholder="Repeat your password">
+          </div>
+        </div>
+        
+        <div class="pt-4">
+          <button type="submit" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3 rounded-xl transition-colors shadow-md flex justify-center items-center gap-2 text-lg active:scale-[0.98]">
+            Create Account <i class="fa-solid fa-check text-sm"></i>
+          </button>
+        </div>
+      </form>
+    </div>
+    
+    <div class="bg-gray-50 px-8 py-4 text-center border-t border-gray-100">
+      <p class="text-sm text-gray-600">
+        Already have an account? 
+        <a href="login" class="font-bold text-brand-600 hover:text-brand-800 hover:underline transition-colors">Sign in here</a>
+      </p>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
