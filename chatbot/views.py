@@ -15,12 +15,11 @@ class AIProvider:
     """Gerencia chamadas para diferentes APIs de IA com sistema de fallback"""
     
     @classmethod
-    def _call_custom_api(cls, prompt, system_msg=None):
+    def _call_custom_api(cls, prompt, system_msg=None, chat_history=None):
         """Tenta chamar a API Customizada (ex: Groq)"""
-        # Pega das variáveis de ambiente. Se não existir, falhará (o que acionará o fallback pro Gemini)
         url = os.environ.get("CUSTOM_API_URL", "https://api.groq.com/openai/v1/chat/completions")
         token = os.environ.get("CUSTOM_API_TOKEN")
-        model = os.environ.get("CUSTOM_API_MODEL", "llama3-8b-8192") # Exemplo de modelo do Groq
+        model = os.environ.get("CUSTOM_API_MODEL", "llama3-8b-8192")
         
         if not token:
             raise ValueError("Token da Custom API ausente.")
@@ -33,19 +32,33 @@ class AIProvider:
         messages = []
         if system_msg:
             messages.append({"role": "system", "content": system_msg})
+            
+        if chat_history:
+            # Pega as últimas 10 mensagens para não estourar o limite de tokens
+            for chat in chat_history[-10:]:
+                messages.append({"role": "user", "content": chat.message})
+                messages.append({"role": "assistant", "content": chat.response})
+                
         messages.append({"role": "user", "content": prompt})
 
-        response = requests.post(url, headers=headers, json={"model": model, "messages": messages}, timeout=10)
+        response = requests.post(url, headers=headers, json={"model": model, "messages": messages}, timeout=15)
         response.raise_for_status()
         return response.json()['choices'][0]['message']['content'].strip()
 
     @classmethod
-    def _call_gemini(cls, prompt, system_msg=None):
+    def _call_gemini(cls, prompt, system_msg=None, chat_history=None):
         """Fallback para o Gemini"""
         api_key = os.environ.get("GEMINI_API_KEY_2") or os.environ.get("GEMINI_API_KEY_3")
         client = genai.Client(api_key=api_key)
         
-        full_prompt = f"[{system_msg}]\n\n{prompt}" if system_msg else prompt
+        # Para evitar erros de formatação de roles, construímos o histórico como um super-prompt no fallback
+        full_prompt = f"[{system_msg}]\n\n" if system_msg else ""
+        
+        if chat_history:
+            for chat in chat_history[-10:]:
+                full_prompt += f"Usuário: {chat.message}\nAssistente: {chat.response}\n\n"
+                
+        full_prompt += f"Usuário: {prompt}\nAssistente:"
         
         response = client.models.generate_content(
             model='gemini-2.5-flash',
@@ -54,14 +67,14 @@ class AIProvider:
         return response.text.strip()
 
     @classmethod
-    def generate_response(cls, prompt, system_msg=None):
+    def generate_response(cls, prompt, system_msg=None, chat_history=None):
         """Tenta API Principal, faz fallback pro Gemini se falhar"""
         try:
-            return cls._call_custom_api(prompt, system_msg)
+            return cls._call_custom_api(prompt, system_msg, chat_history)
         except Exception as e:
             print(f"[AI Fallback] Custom API falhou ({e}). Tentando Gemini...")
             try:
-                return cls._call_gemini(prompt, system_msg)
+                return cls._call_gemini(prompt, system_msg, chat_history)
             except Exception as gemini_e:
                 return f"Erro fatal em todos os provedores de IA: {str(gemini_e)}"
 
@@ -75,9 +88,9 @@ def ask_gemini_title(bot_response):
         return "Nova Conversa"
     return title.replace('"', '').replace("'", "")
 
-def ask_gemini(message):
+def ask_gemini(message, chat_history=None):
     system_prompt = "Você é o assistente oficial e inteligente do Governo do Estado de Mato Grosso. Seja educado, prestativo e forneça informações governamentais quando necessário."
-    return AIProvider.generate_response(message, system_prompt)
+    return AIProvider.generate_response(message, system_prompt, chat_history)
 
 # Create your views here.
 @login_required(login_url='login')
@@ -98,18 +111,24 @@ def chatbot(request, conversation_id=None):
         message = request.POST.get('message')
         conv_id = request.POST.get('conversation_id')
         
-        # Gera a resposta do bot primeiro
-        response = ask_gemini(message)
+        chat_history = []
+        conversation = None
         
         if conv_id:
             try:
                 conversation = Conversation.objects.get(id=conv_id, user=request.user)
+                # Pega as mensagens dessa conversa para mandar de contexto
+                chat_history = list(conversation.messages.all().order_by('created_at'))
                 conversation.updated_at = timezone.now()
                 conversation.save()
             except Conversation.DoesNotExist:
                 return JsonResponse({'error': 'Conversation not found'}, status=404)
-        else:
-            # Gera o título usando a resposta do bot
+        
+        # Gera a resposta do bot primeiro, passando o histórico de contexto
+        response = ask_gemini(message, chat_history)
+        
+        if not conv_id:
+            # Gera o título usando a resposta do bot (como é uma conversa nova, não tem histórico)
             title = ask_gemini_title(response)
             conversation = Conversation(user=request.user, title=title)
             conversation.save()
