@@ -183,6 +183,54 @@
 
 {% block scripts %}
 <script>
+  // ==========================================
+  // FUNÇÕES DE MULTI-AGENTE (TEATRO DE UI)
+  // ==========================================
+  function parseAgents(rawText) {
+    const debateMatch = rawText.match(/<debate>([\s\S]*?)<\/debate>/i);
+    if (!debateMatch) return { debate: null, finalResponse: rawText };
+    
+    const debateText = debateMatch[1].trim();
+    let finalResponse = rawText.replace(/<debate>[\s\S]*?<\/debate>/i, '').trim();
+    finalResponse = finalResponse.replace(/<resposta>/i, '').replace(/<\/resposta>/i, '').trim();
+
+    const lines = debateText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    const agents = [];
+    lines.forEach(line => {
+        const colonIdx = line.indexOf(':');
+        if (colonIdx > -1) {
+            agents.push({
+                name: line.substring(0, colonIdx).trim(),
+                msg: line.substring(colonIdx + 1).trim()
+            });
+        }
+    });
+    return { debate: agents, finalResponse: finalResponse };
+  }
+
+  function getAgentStyles(name) {
+      const n = name.toLowerCase();
+      if (n.includes('dados') || n.includes('analista')) return { bg: 'bg-blue-100 dark:bg-blue-900/40', text: 'text-blue-800 dark:text-blue-300', icon: 'fa-chart-pie' };
+      if (n.includes('jurídico') || n.includes('consultor')) return { bg: 'bg-indigo-100 dark:bg-indigo-900/40', text: 'text-indigo-800 dark:text-indigo-300', icon: 'fa-scale-balanced' };
+      if (n.includes('revisor') || n.includes('estratégico')) return { bg: 'bg-emerald-100 dark:bg-emerald-900/40', text: 'text-emerald-800 dark:text-emerald-300', icon: 'fa-clipboard-check' };
+      return { bg: 'bg-gray-200 dark:bg-gray-700', text: 'text-gray-700 dark:text-gray-300', icon: 'fa-user-tie' };
+  }
+
+  function buildAgentBubbleHTML(name, text) {
+      const styles = getAgentStyles(name);
+      return `
+        <div class="flex gap-3 w-full mt-2 mb-3 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700 animate-fade-in-up">
+          <div class="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-[11px] mt-0.5 ${styles.bg} ${styles.text} shadow-sm">
+            <i class="fa-solid ${styles.icon}"></i>
+          </div>
+          <div class="flex-1">
+            <div class="font-bold text-[11px] uppercase tracking-wide mb-1 ${styles.text}">${name}</div>
+            <div class="text-[14px] leading-relaxed text-gray-600 dark:text-gray-300 italic">"${text}"</div>
+          </div>
+        </div>
+      `;
+  }
+
   function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebar-overlay');
@@ -207,7 +255,7 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-    // Parse Markdown for historical messages safely
+    // Parse Markdown for historical messages safely (including Multi-Agent parsing)
     document.querySelectorAll('.raw-markdown-data').forEach(element => {
       let rawText = '';
       try {
@@ -215,10 +263,21 @@
       } catch (e) {
         console.error("Error reading markdown data", e);
       }
-      const parsedHTML = marked.parse(rawText);
+      
+      const { debate, finalResponse } = parseAgents(rawText);
       const container = element.previousElementSibling;
+      
       if (container && container.classList.contains('historical-msg')) {
-        container.innerHTML = parsedHTML;
+        let html = '';
+        if (debate && debate.length > 0) {
+           debate.forEach(agent => {
+              html += buildAgentBubbleHTML(agent.name, agent.msg);
+           });
+           html += `<div class="mt-5 pt-4 border-t border-gray-100 dark:border-gray-700">${marked.parse(finalResponse)}</div>`;
+        } else {
+           html = marked.parse(finalResponse);
+        }
+        container.innerHTML = html;
       }
     });
 
@@ -322,15 +381,16 @@
       })
       .then(response => response.json())
       .then(data => {
-        // Remove typing indicator
         const indicator = document.querySelector('.typing-indicator');
         if (indicator) indicator.remove();
 
-        const response = data.response;
+        const { debate, finalResponse } = parseAgents(data.response);
         
-        // 2. Add Bot Message
+        // Cria o container principal do Bot
         const botMessageDiv = document.createElement('div');
-        botMessageDiv.className = 'flex justify-start w-full max-w-3xl mx-auto mt-2 mb-6';
+        botMessageDiv.className = 'flex justify-start w-full max-w-3xl mx-auto mt-2 mb-6 animate-fade-in-up';
+        const innerContainerId = 'gov-inner-' + Date.now();
+        
         botMessageDiv.innerHTML = `
           <div class="flex gap-4 w-full">
             <div class="w-8 h-8 rounded-full bg-brand-600 flex-shrink-0 flex items-center justify-center text-white text-sm shadow-sm mt-0.5">
@@ -338,31 +398,91 @@
             </div>
             <div class="text-gray-800 dark:text-gray-200 max-w-full overflow-hidden w-full">
               <div class="font-semibold text-sm mb-1 dark:text-gray-100">Governadoria</div>
-              <div class="text-[15px] leading-relaxed break-words markdown-rendered">${marked.parse(response)}</div>
+              <div id="${innerContainerId}" class="text-[15px] leading-relaxed break-words markdown-rendered w-full"></div>
             </div>
           </div>
         `;
         messagesList.appendChild(botMessageDiv);
+        const innerContainer = document.getElementById(innerContainerId);
         
-        // Se for uma nova conversa, atualiza o ID para os próximos requests e a URL
-        if (data.is_new && data.conversation_id) {
-          convIdInput.value = data.conversation_id;
-          window.history.pushState({}, '', `/c/${data.conversation_id}/`);
-          
-          // Add to sidebar (optional visually, or just reload sidebar)
-          // To keep it simple, we just let the URL handle the current state
-          // A full reload might be better to see the new AI title in the sidebar
-          setTimeout(() => {
-            window.location.reload();
-          }, 1000); // Reload after 1s so user can read the response briefly
-        }
-
-        // Re-enable input
-        messageInput.disabled = false;
-        sendButton.disabled = false;
-        sendButton.innerHTML = '<i class="fa-solid fa-arrow-up"></i>';
-        messageInput.focus();
-        scrollToBottom();
+        // Async function para controlar os delays
+        const playDebate = async () => {
+            if (debate && debate.length > 0) {
+                // Loop pelos agentes debantendo
+                for (const agent of debate) {
+                    const typingId = 'typing-' + Date.now();
+                    const typingHtml = `
+                      <div id="${typingId}" class="flex gap-3 w-full mt-2 mb-3 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700 animate-fade-in-up">
+                        <div class="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] mt-0.5 bg-gray-200 dark:bg-gray-700 text-gray-500">
+                          <i class="fa-solid fa-ellipsis"></i>
+                        </div>
+                        <div class="flex-1">
+                          <div class="font-semibold text-[11px] uppercase tracking-wide mb-0.5 text-gray-500">${agent.name} analisando...</div>
+                          <div class="flex items-center gap-1 mt-1.5 h-4">
+                            <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
+                            <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
+                            <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
+                          </div>
+                        </div>
+                      </div>
+                    `;
+                    innerContainer.insertAdjacentHTML('beforeend', typingHtml);
+                    scrollToBottom();
+                    
+                    await new Promise(r => setTimeout(r, 1800)); // Tempo "pensando"
+                    
+                    document.getElementById(typingId).remove();
+                    innerContainer.insertAdjacentHTML('beforeend', buildAgentBubbleHTML(agent.name, agent.msg));
+                    scrollToBottom();
+                    
+                    await new Promise(r => setTimeout(r, 600)); // Pausa antes do próximo
+                }
+                
+                // Indicador final da Governadoria antes de dar a resposta
+                const govTypingId = 'typing-gov-final';
+                innerContainer.insertAdjacentHTML('beforeend', `
+                    <div id="${govTypingId}" class="flex items-center gap-2 mt-4 mb-2 ml-1 animate-fade-in-up">
+                        <div class="text-xs text-brand-600 dark:text-brand-400 font-semibold">Consolidando parecer final</div>
+                        <div class="flex items-center gap-1 mt-0.5">
+                          <div class="w-1 h-1 bg-brand-500 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
+                          <div class="w-1 h-1 bg-brand-500 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
+                          <div class="w-1 h-1 bg-brand-500 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
+                        </div>
+                    </div>
+                `);
+                scrollToBottom();
+                
+                await new Promise(r => setTimeout(r, 2200)); // Delay da consolidação
+                document.getElementById(govTypingId).remove();
+            }
+            
+            // Injeta o Markdown final
+            const finalWrapper = document.createElement('div');
+            if (debate && debate.length > 0) finalWrapper.className = 'mt-5 pt-4 border-t border-gray-100 dark:border-gray-700 animate-fade-in-up';
+            finalWrapper.innerHTML = marked.parse(finalResponse);
+            innerContainer.appendChild(finalWrapper);
+            scrollToBottom();
+            
+            // Se for uma nova conversa, atualiza a URL
+            if (data.is_new && data.conversation_id) {
+              convIdInput.value = data.conversation_id;
+              window.history.pushState({}, '', `/c/${data.conversation_id}/`);
+              
+              // Recarrega a página um pouco depois para o título da sidebar atualizar
+              setTimeout(() => {
+                window.location.reload();
+              }, 1500); 
+            }
+            
+            // Re-enable input no final de tudo
+            messageInput.disabled = false;
+            sendButton.disabled = false;
+            sendButton.innerHTML = '<i class="fa-solid fa-arrow-up"></i>';
+            messageInput.focus();
+        };
+        
+        // Inicia a execução
+        playDebate();
       })
       .catch(error => {
         const indicator = document.querySelector('.typing-indicator');
