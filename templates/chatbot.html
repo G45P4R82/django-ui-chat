@@ -143,7 +143,8 @@
             </div>
             <div class="text-gray-800 dark:text-gray-200 max-w-full overflow-hidden w-full">
               <div class="font-semibold text-sm mb-1 dark:text-gray-100">Governadoria</div>
-              <div class="text-[15px] leading-relaxed break-words whitespace-pre-wrap markdown-content" style="display: none;">{{chat.response}}</div>
+              <div class="text-[15px] leading-relaxed break-words markdown-rendered historical-msg"></div>
+              <script type="application/json" class="raw-markdown-data">{{chat.response|escapejs}}</script>
             </div>
           </div>
         </div>
@@ -206,14 +207,19 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-    // Parse Markdown for historical messages
-    document.querySelectorAll('.markdown-content').forEach(element => {
-      const rawText = element.textContent || element.innerText;
+    // Parse Markdown for historical messages safely
+    document.querySelectorAll('.raw-markdown-data').forEach(element => {
+      let rawText = '';
+      try {
+        rawText = element.textContent;
+      } catch (e) {
+        console.error("Error reading markdown data", e);
+      }
       const parsedHTML = marked.parse(rawText);
-      const newDiv = document.createElement('div');
-      newDiv.className = 'text-[15px] leading-relaxed break-words whitespace-pre-wrap markdown-rendered';
-      newDiv.innerHTML = parsedHTML;
-      element.parentNode.replaceChild(newDiv, element);
+      const container = element.previousElementSibling;
+      if (container && container.classList.contains('historical-msg')) {
+        container.innerHTML = parsedHTML;
+      }
     });
 
     const messagesList = document.querySelector('.messages-list');
@@ -332,7 +338,7 @@
             </div>
             <div class="text-gray-800 dark:text-gray-200 max-w-full overflow-hidden w-full">
               <div class="font-semibold text-sm mb-1 dark:text-gray-100">Governadoria</div>
-              <div class="text-[15px] leading-relaxed break-words whitespace-pre-wrap markdown-rendered">${marked.parse(response)}</div>
+              <div class="text-[15px] leading-relaxed break-words markdown-rendered">${marked.parse(response)}</div>
             </div>
           </div>
         `;
