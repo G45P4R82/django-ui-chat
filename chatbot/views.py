@@ -10,11 +10,11 @@ from .models import Chat, Conversation
 
 from django.utils import timezone
 
-def ask_gemini_title(message):
+def ask_gemini_title(bot_response):
     try:
         api_key = os.environ.get("GEMINI_API_KEY_2") or os.environ.get("GEMINI_API_KEY_3")
         client = genai.Client(api_key=api_key)
-        prompt = f"Crie um título muito curto (máximo 4 palavras) que resuma esta mensagem: '{message}'"
+        prompt = f"Crie um título muito curto (máximo 4 palavras) que resuma este texto: '{bot_response}'"
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=prompt,
@@ -55,6 +55,9 @@ def chatbot(request, conversation_id=None):
         message = request.POST.get('message')
         conv_id = request.POST.get('conversation_id')
         
+        # Gera a resposta do bot primeiro
+        response = ask_gemini(message)
+        
         if conv_id:
             try:
                 conversation = Conversation.objects.get(id=conv_id, user=request.user)
@@ -63,11 +66,10 @@ def chatbot(request, conversation_id=None):
             except Conversation.DoesNotExist:
                 return JsonResponse({'error': 'Conversation not found'}, status=404)
         else:
-            title = ask_gemini_title(message)
+            # Gera o título usando a resposta do bot
+            title = ask_gemini_title(response)
             conversation = Conversation(user=request.user, title=title)
             conversation.save()
-            
-        response = ask_gemini(message)
 
         chat = Chat(user=request.user, conversation=conversation, message=message, response=response, created_at=timezone.now())
         chat.save()
