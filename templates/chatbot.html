@@ -415,6 +415,9 @@
 
       // Inicia a execução com SSE Stream
       const processStream = async () => {
+          const indicator = document.querySelector('.typing-indicator');
+          if (indicator) indicator.remove(); // Removemos as bolinhas antigas
+
           const innerContainerId = 'gov-inner-' + Date.now();
           const botMessageDiv = document.createElement('div');
           botMessageDiv.className = 'flex justify-start w-full max-w-3xl mx-auto mt-2 mb-6 animate-fade-in-up';
@@ -425,7 +428,13 @@
               </div>
               <div class="text-gray-800 dark:text-gray-200 max-w-full overflow-hidden w-full">
                 <div class="font-semibold text-sm mb-1 dark:text-gray-100">Governadoria</div>
-                <div id="${innerContainerId}" class="text-[15px] leading-relaxed break-words markdown-rendered w-full"></div>
+                <div id="${innerContainerId}" class="text-[15px] leading-relaxed break-words markdown-rendered w-full">
+                  <div class="typing-indicator flex items-center gap-1 mt-2">
+                    <div class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
+                    <div class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
+                    <div class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
+                  </div>
+                </div>
               </div>
             </div>
           `;
