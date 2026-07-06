@@ -373,126 +373,166 @@
         params.append('conversation_id', currentConvId);
       }
 
-      // Make API Request
-      fetch("{% url 'chatbot' %}", {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params
-      })
-      .then(response => response.json())
-      .then(data => {
-        const indicator = document.querySelector('.typing-indicator');
-        if (indicator) indicator.remove();
-
-        const { debate, finalResponse } = parseAgents(data.response);
-        
-        // Cria o container principal do Bot
-        const botMessageDiv = document.createElement('div');
-        botMessageDiv.className = 'flex justify-start w-full max-w-3xl mx-auto mt-2 mb-6 animate-fade-in-up';
-        const innerContainerId = 'gov-inner-' + Date.now();
-        
-        botMessageDiv.innerHTML = `
-          <div class="flex gap-4 w-full">
-            <div class="w-8 h-8 rounded-full bg-brand-600 flex-shrink-0 flex items-center justify-center text-white text-sm shadow-sm mt-0.5">
-              <i class="fa-solid fa-robot"></i>
+      // Helper for showing agents/tools
+      const showToolCall = (toolName) => {
+        const innerContainer = document.getElementById(innerContainerId);
+        if (!innerContainer) return;
+        const typingId = 'typing-' + Date.now();
+        const typingHtml = `
+          <div id="${typingId}" class="tool-indicator flex gap-3 w-full mt-2 mb-3 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700 animate-fade-in-up">
+            <div class="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] mt-0.5 bg-gray-200 dark:bg-gray-700 text-gray-500">
+              <i class="fa-solid fa-gear"></i>
             </div>
-            <div class="text-gray-800 dark:text-gray-200 max-w-full overflow-hidden w-full">
-              <div class="font-semibold text-sm mb-1 dark:text-gray-100">Governadoria</div>
-              <div id="${innerContainerId}" class="text-[15px] leading-relaxed break-words markdown-rendered w-full"></div>
+            <div class="flex-1">
+              <div class="font-semibold text-[11px] uppercase tracking-wide mb-0.5 text-gray-500">Executando: ${toolName}...</div>
+              <div class="flex items-center gap-1 mt-1.5 h-4">
+                <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
+                <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
+                <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
+              </div>
             </div>
           </div>
         `;
-        messagesList.appendChild(botMessageDiv);
+        innerContainer.insertAdjacentHTML('beforeend', typingHtml);
+        scrollToBottom();
+        return typingId;
+      };
+
+      const finishToolCall = (typingId, toolName) => {
+        const el = document.getElementById(typingId);
+        if (el) el.remove();
         const innerContainer = document.getElementById(innerContainerId);
-        
-        // Async function para controlar os delays
-        const playDebate = async () => {
-            if (debate && debate.length > 0) {
-                // Loop pelos agentes debantendo
-                for (const agent of debate) {
-                    const typingId = 'typing-' + Date.now();
-                    const typingHtml = `
-                      <div id="${typingId}" class="flex gap-3 w-full mt-2 mb-3 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700 animate-fade-in-up">
-                        <div class="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] mt-0.5 bg-gray-200 dark:bg-gray-700 text-gray-500">
-                          <i class="fa-solid fa-ellipsis"></i>
-                        </div>
-                        <div class="flex-1">
-                          <div class="font-semibold text-[11px] uppercase tracking-wide mb-0.5 text-gray-500">${agent.name} analisando...</div>
-                          <div class="flex items-center gap-1 mt-1.5 h-4">
-                            <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
-                            <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
-                            <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
-                          </div>
-                        </div>
-                      </div>
-                    `;
-                    innerContainer.insertAdjacentHTML('beforeend', typingHtml);
-                    scrollToBottom();
-                    
-                    await new Promise(r => setTimeout(r, 1800)); // Tempo "pensando"
-                    
-                    document.getElementById(typingId).remove();
-                    innerContainer.insertAdjacentHTML('beforeend', buildAgentBubbleHTML(agent.name, agent.msg));
-                    scrollToBottom();
-                    
-                    await new Promise(r => setTimeout(r, 600)); // Pausa antes do próximo
-                }
-                
-                // Indicador final da Governadoria antes de dar a resposta
-                const govTypingId = 'typing-gov-final';
-                innerContainer.insertAdjacentHTML('beforeend', `
-                    <div id="${govTypingId}" class="flex items-center gap-2 mt-4 mb-2 ml-1 animate-fade-in-up">
-                        <div class="text-xs text-brand-600 dark:text-brand-400 font-semibold">Consolidando parecer final</div>
-                        <div class="flex items-center gap-1 mt-0.5">
-                          <div class="w-1 h-1 bg-brand-500 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
-                          <div class="w-1 h-1 bg-brand-500 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
-                          <div class="w-1 h-1 bg-brand-500 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
-                        </div>
-                    </div>
-                `);
-                scrollToBottom();
-                
-                await new Promise(r => setTimeout(r, 2200)); // Delay da consolidação
-                document.getElementById(govTypingId).remove();
-            }
-            
-            // Injeta o Markdown final
-            const finalWrapper = document.createElement('div');
-            if (debate && debate.length > 0) finalWrapper.className = 'mt-5 pt-4 border-t border-gray-100 dark:border-gray-700 animate-fade-in-up';
-            finalWrapper.innerHTML = marked.parse(finalResponse);
-            innerContainer.appendChild(finalWrapper);
+        if (innerContainer) {
+            innerContainer.insertAdjacentHTML('beforeend', `
+              <div class="flex items-center gap-2 mt-2 mb-3 ml-1 animate-fade-in-up">
+                  <i class="fa-solid fa-check text-green-500 text-xs"></i>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">Consulta <b>${toolName}</b> concluída</div>
+              </div>
+            `);
             scrollToBottom();
-            
-            // Se for uma nova conversa, atualiza a URL
-            if (data.is_new && data.conversation_id) {
-              convIdInput.value = data.conversation_id;
-              window.history.pushState({}, '', `/c/${data.conversation_id}/`);
+        }
+      };
+
+      // Inicia a execução com SSE Stream
+      const processStream = async () => {
+          const innerContainerId = 'gov-inner-' + Date.now();
+          const botMessageDiv = document.createElement('div');
+          botMessageDiv.className = 'flex justify-start w-full max-w-3xl mx-auto mt-2 mb-6 animate-fade-in-up';
+          botMessageDiv.innerHTML = `
+            <div class="flex gap-4 w-full">
+              <div class="w-8 h-8 rounded-full bg-brand-600 flex-shrink-0 flex items-center justify-center text-white text-sm shadow-sm mt-0.5">
+                <i class="fa-solid fa-robot"></i>
+              </div>
+              <div class="text-gray-800 dark:text-gray-200 max-w-full overflow-hidden w-full">
+                <div class="font-semibold text-sm mb-1 dark:text-gray-100">Governadoria</div>
+                <div id="${innerContainerId}" class="text-[15px] leading-relaxed break-words markdown-rendered w-full"></div>
+              </div>
+            </div>
+          `;
+          messagesList.appendChild(botMessageDiv);
+          const innerContainer = document.getElementById(innerContainerId);
+
+          try {
+              const response = await fetch("{% url 'chatbot' %}", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: params
+              });
+
+              const reader = response.body.getReader();
+              const decoder = new TextDecoder("utf-8");
               
-              // Recarrega a página um pouco depois para o título da sidebar atualizar
-              setTimeout(() => {
-                window.location.reload();
-              }, 1500); 
-            }
-            
-            // Re-enable input no final de tudo
-            messageInput.disabled = false;
-            sendButton.disabled = false;
-            sendButton.innerHTML = '<i class="fa-solid fa-arrow-up"></i>';
-            messageInput.focus();
-        };
-        
-        // Inicia a execução
-        playDebate();
-      })
-      .catch(error => {
-        const indicator = document.querySelector('.typing-indicator');
-        if (indicator) indicator.remove();
-        
-        messageInput.disabled = false;
-        sendButton.disabled = false;
-        sendButton.innerHTML = '<i class="fa-solid fa-arrow-up"></i>';
-        alert('Ocorreu um erro ao conectar. Tente novamente.');
-      });
+              let currentToolId = null;
+              let currentToolName = null;
+              let accumulatedText = "";
+              const innerContainer = document.getElementById(innerContainerId);
+
+              while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) break;
+                  
+                  const chunk = decoder.decode(value, {stream: true});
+                  const lines = chunk.split('\n');
+                  
+                  for (let line of lines) {
+                      if (line.startsWith('data: ')) {
+                          const dataStr = line.substring(6).trim();
+                          if (!dataStr) continue;
+                          if (dataStr === '[DONE]') break;
+                          
+                          try {
+                              const data = JSON.parse(dataStr);
+                              
+                              if (data.type === 'metadata') {
+                                  if (!convIdInput.value) {
+                                      convIdInput.value = data.conversation_id;
+                                      window.history.pushState({}, '', `/c/${data.conversation_id}/`);
+                                  }
+                              } 
+                              else if (data.type === 'tool_call') {
+                                  const indicator = document.querySelector('.typing-indicator');
+                                  if (indicator) indicator.remove();
+                                  
+                                  currentToolName = data.name;
+                                  currentToolId = showToolCall(data.name);
+                              } 
+                              else if (data.type === 'tool_resp') {
+                                  if (currentToolId) {
+                                      finishToolCall(currentToolId, data.name || currentToolName);
+                                      currentToolId = null;
+                                  }
+                              } 
+                              else if (data.type === 'text') {
+                                  const indicator = document.querySelector('.typing-indicator');
+                                  if (indicator) indicator.remove();
+                                  
+                                  // Como o GCP manda blocos inteiros, a gente renderiza o markdown direto no final
+                                  // Mas o endpoint também pode mandar chunks delta
+                                  accumulatedText += data.text;
+                                  
+                                  // Se já tivemos tool calls, a gente limpa a sujeira do HTML antes de jogar o finalText
+                                  // Ou injetamos o texto markdown-rendered embaixo das tools
+                                  let markdownContainer = document.getElementById(innerContainerId + '-md');
+                                  if (!markdownContainer) {
+                                      innerContainer.insertAdjacentHTML('beforeend', `<div id="${innerContainerId}-md" class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 animate-fade-in-up markdown-rendered"></div>`);
+                                      markdownContainer = document.getElementById(innerContainerId + '-md');
+                                  }
+                                  markdownContainer.innerHTML = marked.parse(accumulatedText);
+                                  scrollToBottom();
+                              }
+                              else if (data.type === 'title_updated') {
+                                  // Reload sutil para carregar o título na sidebar
+                                  setTimeout(() => window.location.reload(), 1500);
+                              }
+                              else if (data.type === 'error' || data.type === 'fatal') {
+                                  console.warn("AI Fallback/Error:", data.error);
+                              }
+                          } catch (e) {
+                              console.error("Erro processando chunk:", e, dataStr);
+                          }
+                      }
+                  }
+              }
+              
+              // Fim do Stream
+              messageInput.disabled = false;
+              sendButton.disabled = false;
+              sendButton.innerHTML = '<i class="fa-solid fa-arrow-up"></i>';
+              messageInput.focus();
+              scrollToBottom();
+
+          } catch (error) {
+              const indicator = document.querySelector('.typing-indicator');
+              if (indicator) indicator.remove();
+              
+              messageInput.disabled = false;
+              sendButton.disabled = false;
+              sendButton.innerHTML = '<i class="fa-solid fa-arrow-up"></i>';
+              alert('Ocorreu um erro ao conectar. Tente novamente.');
+          }
+      };
+
+      processStream();
     });
   });
 </script>
