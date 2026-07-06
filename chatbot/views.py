@@ -208,7 +208,7 @@ def chatbot(request, conversation_id=None):
 
         return StreamingHttpResponse(stream_generator(), content_type='text/event-stream')
         
-    return render(request, 'chatbot.html', {
+    return render(request, 'chatbot/chatbot.html', {
         'chats': chats,
         'conversations': conversations,
         'active_conversation': active_conversation
@@ -216,7 +216,7 @@ def chatbot(request, conversation_id=None):
 
 @login_required(login_url='login')
 def profile(request):
-    return render(request, 'profile.html')
+    return render(request, 'chatbot/profile.html')
 
 def login(request):
     if request.method == 'POST':
@@ -228,9 +228,9 @@ def login(request):
             return redirect('chatbot')
         else:
             error_message = 'Invalid username or password'
-            return render(request, 'login.html', {'error_message': error_message})
+            return render(request, 'chatbot/login.html', {'error_message': error_message})
     else:
-        return render(request, 'login.html')
+        return render(request, 'chatbot/login.html')
 
 def register(request):
     if request.method == 'POST':
@@ -247,11 +247,11 @@ def register(request):
                 return redirect('chatbot')
             except:
                 error_message = 'Error creating account'
-                return render(request, 'register.html', {'error_message': error_message})
+                return render(request, 'chatbot/register.html', {'error_message': error_message})
         else:
             error_message = 'Password dont match'
-            return render(request, 'register.html', {'error_message': error_message})
-    return render(request, 'register.html')
+            return render(request, 'chatbot/register.html', {'error_message': error_message})
+    return render(request, 'chatbot/register.html')
 
 def logout(request):
     auth.logout(request)

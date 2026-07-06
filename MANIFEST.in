@@ -1,0 +1,4 @@
+include LICENSE
+include README.md
+recursive-include chatbot/templates *
+recursive-include chatbot/migrations *
