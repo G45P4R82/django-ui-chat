@@ -11,9 +11,53 @@ from .models import Chat, Conversation
 
 from django.utils import timezone
 
+import subprocess
+
 class AIProvider:
     """Gerencia chamadas para diferentes APIs de IA com sistema de fallback"""
     
+    @classmethod
+    def _call_gcp_cloud_run(cls, prompt, system_msg, user_id, session_id):
+        """Tenta chamar a API do Governo no GCP Cloud Run"""
+        url = "https://chatbot-bot-dev-ecengx7mxa-rj.a.run.app"
+        try:
+            token = subprocess.check_output(['gcloud', 'auth', 'print-identity-token']).decode().strip()
+        except Exception as e:
+            raise ValueError(f"GCP Token error: {e}")
+            
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        
+        if not session_id:
+            # Cria a sessão
+            res_sess = requests.post(f"{url}/apps/bot/users/{user_id}/sessions", headers=headers, json={}, timeout=10)
+            res_sess.raise_for_status()
+            session_id = res_sess.json().get('id')
+            
+        # Inclui o system prompt (com as instruções do teatro multi-agente) direto na mensagem
+        full_prompt = f"[{system_msg}]\n\n{prompt}" if system_msg else prompt
+        
+        payload = {
+            "app_name": "bot",
+            "user_id": user_id,
+            "session_id": session_id,
+            "new_message": {
+                "role": "user",
+                "parts": [{"text": full_prompt}]
+            }
+        }
+        
+        res = requests.post(f"{url}/run", headers=headers, json=payload, timeout=30)
+        res.raise_for_status()
+        data = res.json()
+        
+        try:
+            return data[0]['content']['parts'][0]['text'].strip(), session_id
+        except (IndexError, KeyError) as e:
+            raise ValueError(f"Formato de resposta inválido do GCP: {e}")
+
     @classmethod
     def _call_custom_api(cls, prompt, system_msg=None, chat_history=None):
         """Tenta chamar a API Customizada (ex: Groq)"""
@@ -68,28 +112,49 @@ class AIProvider:
         return response.text.strip()
 
     @classmethod
-    def generate_response(cls, prompt, system_msg=None, chat_history=None):
-        """Tenta API Principal, faz fallback pro Gemini se falhar"""
+    def generate_chat(cls, prompt, system_msg=None, chat_history=None, user_id=None, gcp_session_id=None):
+        """Tenta GCP -> Custom -> Gemini"""
+        new_gcp_session_id = gcp_session_id
+        
         try:
-            return cls._call_custom_api(prompt, system_msg, chat_history)
+            # 1. TENTA GCP PRIMEIRO
+            response, new_gcp_session_id = cls._call_gcp_cloud_run(prompt, system_msg, user_id, gcp_session_id)
+            return response, new_gcp_session_id
         except Exception as e:
-            print(f"[AI Fallback] Custom API falhou ({e}). Tentando Gemini...")
+            print(f"[AI Fallback] GCP API falhou ({e}). Tentando Custom API...")
             try:
-                return cls._call_gemini(prompt, system_msg, chat_history)
-            except Exception as gemini_e:
-                return f"Erro fatal em todos os provedores de IA: {str(gemini_e)}"
+                # 2. TENTA API CUSTOMIZADA (ex: Groq)
+                return cls._call_custom_api(prompt, system_msg, chat_history), new_gcp_session_id
+            except Exception as e2:
+                print(f"[AI Fallback] Custom API falhou ({e2}). Tentando Gemini...")
+                try:
+                    # 3. TENTA GEMINI DIRETO
+                    return cls._call_gemini(prompt, system_msg, chat_history), new_gcp_session_id
+                except Exception as e3:
+                    return f"Erro fatal em todos os provedores: {str(e3)}", new_gcp_session_id
+
+    @classmethod
+    def generate_title(cls, prompt, system_msg=None):
+        """Para títulos pulamos o GCP para não poluir o histórico da sessão lá e usamos apenas Custom/Gemini"""
+        try:
+            return cls._call_custom_api(prompt, system_msg)
+        except:
+            try:
+                return cls._call_gemini(prompt, system_msg)
+            except:
+                return "Nova Conversa"
 
 
 def ask_gemini_title(bot_response):
     system_prompt = "Você é um classificador. Responda APENAS com o título solicitado, sem aspas e sem formatação."
     user_prompt = f"Crie um título muito curto (máximo 4 palavras) que resuma este texto: '{bot_response}'"
-    title = AIProvider.generate_response(user_prompt, system_prompt)
+    title = AIProvider.generate_title(user_prompt, system_prompt)
     
     if "Erro fatal" in title:
         return "Nova Conversa"
     return title.replace('"', '').replace("'", "")
 
-def ask_gemini(message, chat_history=None):
+def ask_gemini(message, user_id, gcp_session_id=None, chat_history=None):
     system_prompt = """Você é o assistente oficial e inteligente do Governo do Estado de Mato Grosso. Seja educado, prestativo e forneça informações governamentais.
 
 DIRETRIZ DE COMPLEXIDADE E FORMATO:
@@ -107,7 +172,7 @@ Revisor Estratégico: [fala curta sob a ótica estratégica e de políticas púb
 </resposta>
 
 Se a pergunta não for complexa, ignore as tags e dê apenas a resposta."""
-    return AIProvider.generate_response(message, system_prompt, chat_history)
+    return AIProvider.generate_chat(message, system_prompt, chat_history, user_id, gcp_session_id)
 
 # Create your views here.
 @login_required(login_url='login')
@@ -136,18 +201,25 @@ def chatbot(request, conversation_id=None):
                 conversation = Conversation.objects.get(id=conv_id, user=request.user)
                 # Pega as mensagens dessa conversa para mandar de contexto
                 chat_history = list(conversation.messages.all().order_by('created_at'))
-                conversation.updated_at = timezone.now()
-                conversation.save()
+                
             except Conversation.DoesNotExist:
                 return JsonResponse({'error': 'Conversation not found'}, status=404)
         
-        # Gera a resposta do bot primeiro, passando o histórico de contexto
-        response = ask_gemini(message, chat_history)
+        # Pega a sessao gcp vinculada a essa conversa
+        gcp_sid = conversation.gcp_session_id if conversation else None
+        
+        # Gera a resposta do bot primeiro (Tenta GCP -> Custom -> Gemini)
+        response, new_gcp_sid = ask_gemini(message, request.user.username, gcp_sid, chat_history)
         
         if not conv_id:
             # Gera o título usando a resposta do bot (como é uma conversa nova, não tem histórico)
             title = ask_gemini_title(response)
-            conversation = Conversation(user=request.user, title=title)
+            conversation = Conversation(user=request.user, title=title, gcp_session_id=new_gcp_sid)
+            conversation.save()
+        else:
+            if new_gcp_sid and not conversation.gcp_session_id:
+                conversation.gcp_session_id = new_gcp_sid
+            conversation.updated_at = timezone.now()
             conversation.save()
 
         chat = Chat(user=request.user, conversation=conversation, message=message, response=response, created_at=timezone.now())
