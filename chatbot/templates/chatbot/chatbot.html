@@ -1,6 +1,6 @@
 {% extends 'chatbot/base.html' %}
 
-{% block title %}Chatbot - Governadoria{% endblock %}
+{% block title %}Chatbot - TarsLabs Agent{% endblock %}
 
 {% block styles %}
 <style>
@@ -63,6 +63,10 @@
 
     <!-- Perfil Rodapé -->
     <div class="border-t border-gray-800 p-3 flex flex-col gap-1">
+      <a href="{% url 'integrations' %}" class="flex items-center gap-3 w-full hover:bg-gray-800 text-gray-400 hover:text-white rounded-lg px-3 py-2 transition-colors">
+        <i class="fa-solid fa-plug w-4 text-center"></i>
+        <span class="text-sm font-medium">Integrações MCP</span>
+      </a>
       <a href="{% url 'logout' %}" class="flex items-center gap-3 w-full hover:bg-gray-800 text-gray-400 hover:text-red-400 rounded-lg px-3 py-2 transition-colors">
         <i class="fa-solid fa-sign-out-alt w-4 text-center"></i>
         <span class="text-sm font-medium">Sair da Conta</span>
@@ -95,8 +99,8 @@
           <i class="fa-solid fa-robot"></i>
         </div>
         <div>
-          <h1 class="text-lg md:text-xl font-bold leading-tight text-gray-800 dark:text-gray-100">Governadoria</h1>
-          <p class="text-gray-500 dark:text-gray-400 text-xs hidden md:block">Governo do Estado de Mato Grosso</p>
+          <h1 class="text-lg md:text-xl font-bold leading-tight text-gray-800 dark:text-gray-100">TarsLabs Agent</h1>
+          <p class="text-gray-500 dark:text-gray-400 text-xs hidden md:block">TarsLabs WhiteLabel UI Agent</p>
         </div>
       </div>
     </header>
@@ -142,7 +146,7 @@
               <i class="fa-solid fa-robot"></i>
             </div>
             <div class="text-gray-800 dark:text-gray-200 max-w-full overflow-hidden w-full">
-              <div class="font-semibold text-sm mb-1 dark:text-gray-100">Governadoria</div>
+              <div class="font-semibold text-sm mb-1 dark:text-gray-100">TarsLabs Agent</div>
               <div class="text-[15px] leading-relaxed break-words markdown-rendered historical-msg"></div>
               <script type="text/markdown" class="raw-markdown-data">{{chat.response|safe}}</script>
             </div>
@@ -161,7 +165,7 @@
           
           <textarea 
             class="message-input w-full bg-transparent text-gray-800 dark:text-gray-100 rounded-2xl pl-4 pr-14 py-3 focus:outline-none resize-none min-h-[52px] max-h-48 placeholder-gray-500 dark:placeholder-gray-400" 
-            placeholder="Mensagem para Governadoria..." 
+            placeholder="Mensagem para TarsLabs Agent..." 
             rows="1"
             required></textarea>
             
@@ -350,7 +354,7 @@
             <i class="fa-solid fa-robot"></i>
           </div>
           <div class="text-gray-800 dark:text-gray-200 max-w-full">
-            <div class="font-semibold text-sm mb-1 dark:text-gray-100">Governadoria</div>
+            <div class="font-semibold text-sm mb-1 dark:text-gray-100">TarsLabs Agent</div>
             <div class="flex items-center gap-1 mt-2">
               <div class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
               <div class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
@@ -373,45 +377,7 @@
         params.append('conversation_id', currentConvId);
       }
 
-      // Helper for showing agents/tools
-      const showToolCall = (toolName) => {
-        const innerContainer = document.getElementById(innerContainerId);
-        if (!innerContainer) return;
-        const typingId = 'typing-' + Date.now();
-        const typingHtml = `
-          <div id="${typingId}" class="tool-indicator flex gap-3 w-full mt-2 mb-3 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700 animate-fade-in-up">
-            <div class="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] mt-0.5 bg-gray-200 dark:bg-gray-700 text-gray-500">
-              <i class="fa-solid fa-gear"></i>
-            </div>
-            <div class="flex-1">
-              <div class="font-semibold text-[11px] uppercase tracking-wide mb-0.5 text-gray-500">Executando: ${toolName}...</div>
-              <div class="flex items-center gap-1 mt-1.5 h-4">
-                <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
-                <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
-                <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
-              </div>
-            </div>
-          </div>
-        `;
-        innerContainer.insertAdjacentHTML('beforeend', typingHtml);
-        scrollToBottom();
-        return typingId;
-      };
-
-      const finishToolCall = (typingId, toolName) => {
-        const el = document.getElementById(typingId);
-        if (el) el.remove();
-        const innerContainer = document.getElementById(innerContainerId);
-        if (innerContainer) {
-            innerContainer.insertAdjacentHTML('beforeend', `
-              <div class="flex items-center gap-2 mt-2 mb-3 ml-1 animate-fade-in-up">
-                  <i class="fa-solid fa-check text-green-500 text-xs"></i>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">Consulta <b>${toolName}</b> concluída</div>
-              </div>
-            `);
-            scrollToBottom();
-        }
-      };
+      let currentToolTypingId = null;
 
       // Inicia a execução com SSE Stream
       const processStream = async () => {
@@ -427,9 +393,9 @@
                 <i class="fa-solid fa-robot"></i>
               </div>
               <div class="text-gray-800 dark:text-gray-200 max-w-full overflow-hidden w-full">
-                <div class="font-semibold text-sm mb-1 dark:text-gray-100">Governadoria</div>
+                <div class="font-semibold text-sm mb-1 dark:text-gray-100">TarsLabs Agent</div>
                 <div id="${innerContainerId}" class="text-[15px] leading-relaxed break-words markdown-rendered w-full">
-                  <div class="typing-indicator flex items-center gap-1 mt-2">
+                  <div id="main-typing-indicator" class="typing-indicator flex items-center gap-1 mt-2">
                     <div class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
                     <div class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
                     <div class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
@@ -440,6 +406,51 @@
           `;
           messagesList.appendChild(botMessageDiv);
           const innerContainer = document.getElementById(innerContainerId);
+          
+          // Helper for showing agents/tools
+          const showToolCall = (toolName) => {
+            const mainIndicator = document.getElementById('main-typing-indicator');
+            if (mainIndicator) mainIndicator.style.display = 'none';
+            
+            const typingId = 'typing-' + Date.now();
+            const typingHtml = `
+              <div id="${typingId}" class="tool-indicator flex gap-3 w-full mt-2 mb-3 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700 animate-fade-in-up">
+                <div class="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] mt-0.5 bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400">
+                  <i class="fa-solid fa-plug"></i>
+                </div>
+                <div class="flex-1">
+                  <div class="font-semibold text-[11px] uppercase tracking-wide mb-0.5 text-gray-500 dark:text-gray-400">Acessando Integração MCP</div>
+                  <div class="text-[13px] text-gray-600 dark:text-gray-300">Ferramenta: <span class="font-mono text-[12px] bg-gray-200 dark:bg-gray-700 px-1 py-0.5 rounded">${toolName}</span>...</div>
+                  <div class="flex items-center gap-1 mt-2 h-2">
+                    <div class="w-1.5 h-1.5 bg-brand-400 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
+                    <div class="w-1.5 h-1.5 bg-brand-400 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
+                    <div class="w-1.5 h-1.5 bg-brand-400 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
+                  </div>
+                </div>
+              </div>
+            `;
+            innerContainer.insertAdjacentHTML('beforeend', typingHtml);
+            scrollToBottom();
+            return typingId;
+          };
+
+          const finishToolCall = (typingId, toolName) => {
+            const el = document.getElementById(typingId);
+            if (el) el.remove();
+            
+            const mainIndicator = document.getElementById('main-typing-indicator');
+            if (mainIndicator) mainIndicator.style.display = 'flex';
+            
+            if (innerContainer) {
+                innerContainer.insertAdjacentHTML('beforeend', `
+                  <div class="flex items-center gap-2 mt-2 mb-3 ml-1 animate-fade-in-up">
+                      <i class="fa-solid fa-check text-green-500 text-xs"></i>
+                      <div class="text-xs text-gray-500 dark:text-gray-400">Dados de <b>${toolName}</b> recuperados. Processando...</div>
+                  </div>
+                `);
+                scrollToBottom();
+            }
+          };
 
           try {
               const response = await fetch("{% url 'chatbot' %}", {

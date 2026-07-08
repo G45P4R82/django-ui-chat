@@ -16,3 +16,6 @@ tqdm
 typing_extensions
 urllib3
 yarl
+mcp[cli]
+httpx
+sseclient-py

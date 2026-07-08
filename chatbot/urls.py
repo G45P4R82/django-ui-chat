@@ -5,6 +5,7 @@ urlpatterns = [
     path('', views.chatbot, name='chatbot'),
     path('c/<int:conversation_id>/', views.chatbot, name='chatbot_conversation'),
     path('profile/', views.profile, name='profile'),
+    path('integrations/', views.integrations, name='integrations'),
     path('login', views.login, name='login'),
     path('register', views.register, name='register'),
     path('logout', views.logout, name='logout'),

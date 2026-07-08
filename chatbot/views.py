@@ -9,7 +9,8 @@ from google import genai
 from django.contrib import auth
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
-from .models import Chat, Conversation
+from .models import Chat, Conversation, MCPServer, UserMCPConnection
+from .mcp_client import MCPClient
 
 from django.utils import timezone
 
@@ -87,32 +88,139 @@ class AIProvider:
         yield {"type": "done", "final_text": final_text, "session_id": session_id}
 
     @classmethod
-    def _call_gemini_stream(cls, prompt, system_msg=None, chat_history=None):
+    def _call_gemini_stream(cls, prompt, system_msg=None, chat_history=None, mcp_tools=None, mcp_connections=None):
         api_key = os.environ.get("GEMINI_API_KEY_2") or os.environ.get("GEMINI_API_KEY_3")
+        
+        # If we don't have API keys, just fail gracefully so fallback isn't used
+        if not api_key:
+             yield {"type": "error", "error": "Gemini API key is missing."}
+             return
+             
         client = genai.Client(api_key=api_key)
         
+        # Handle tools config for Gemini
+        tools_config = []
+        if mcp_tools:
+            # We map MCP tool schemas to Gemini FunctionDeclarations
+            from google.genai import types
+            
+            gemini_tools = []
+            for tool in mcp_tools:
+                # Basic mapping, in a real scenario you would parse the JSON Schema to Gemini types
+                parameters_schema = tool.get("parameters", {})
+                
+                # Gemini doesn't fully support all JSON Schema features cleanly in FunctionDeclaration yet without some manual mapping, 
+                # but we can pass it as a dict and let the SDK handle it internally or parse it to OpenAPI schema.
+                
+                # Para simplificar e garantir funcionamento imediato no Gemini 2.5:
+                # Se o schema MCP tiver 'properties', mapeamos para object
+                if "properties" in parameters_schema:
+                    gemini_tools.append(types.FunctionDeclaration(
+                        name=tool["name"],
+                        description=tool["description"],
+                        # Precisamos mapear para dict cru, o SDK do Gemini prefere dicionarios OpenAPI 3.0
+                        parameters=parameters_schema
+                    ))
+                else:
+                    gemini_tools.append(types.FunctionDeclaration(
+                        name=tool["name"],
+                        description=tool["description"],
+                    ))
+            if gemini_tools:
+                 tools_config = [types.Tool(function_declarations=gemini_tools)]
+
         full_prompt = f"[{system_msg}]\n\n" if system_msg else ""
         if chat_history:
             for chat in chat_history[-10:]:
                 full_prompt += f"Usuário: {chat.message}\nAssistente: {chat.response}\n\n"
         full_prompt += f"Usuário: {prompt}\nAssistente:"
         
-        # Simulando steps pro frontend
-        yield {"type": "tool_call", "name": "Gemini_Flash_Fallback"}
-        
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=full_prompt,
-        )
-        
-        yield {"type": "tool_resp", "name": "Gemini_Flash_Fallback"}
-        final_text = response.text.strip()
-        yield {"type": "text", "text": final_text}
-        yield {"type": "done", "final_text": final_text, "session_id": None}
+        # We start the session (we don't use stream directly here to easily handle function calls)
+        try:
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=full_prompt,
+                config=types.GenerateContentConfig(tools=tools_config) if tools_config else None
+            )
+            
+            # Check if Gemini wants to call a tool
+            if response.function_calls:
+                for function_call in response.function_calls:
+                    tool_name = function_call.name
+                    arguments = {k: v for k, v in function_call.args.items()}
+                    
+                    yield {"type": "tool_call", "name": tool_name}
+                    
+                    # Execute tool via MCP
+                    tool_result_text = "Tool failed."
+                    for conn in mcp_connections:
+                        try:
+                            mcp_client = MCPClient(conn.mcp_server.url)
+                            # We inject the tenant_id explicitly if it's missing just in case, though the prompt should handle it
+                            if "tenant_id" not in arguments:
+                                arguments["tenant_id"] = conn.access_token
+                            
+                            res = mcp_client.call_tool_sync(tool_name, arguments)
+                            if res:
+                                tool_result_text = res
+                                break # Found the server that handled it
+                        except Exception as e:
+                            pass
+                    
+                    yield {"type": "tool_resp", "name": tool_name}
+                    
+                    # Send result back to Gemini
+                    function_response_part = types.Part.from_function_response(
+                        name=tool_name,
+                        response={"result": tool_result_text}
+                    )
+                    
+                    # Do a follow up call
+                    follow_up_response = client.models.generate_content(
+                         model='gemini-2.5-flash',
+                         contents=[
+                             types.Content(role="user", parts=[types.Part.from_text(full_prompt)]),
+                             types.Content(role="model", parts=response.parts),
+                             types.Content(role="user", parts=[function_response_part])
+                         ]
+                    )
+                    
+                    final_text = follow_up_response.text.strip()
+                    yield {"type": "text", "text": final_text}
+                    yield {"type": "done", "final_text": final_text, "session_id": None}
+                    return
+
+            # No tool called, just text
+            final_text = response.text.strip()
+            yield {"type": "text", "text": final_text}
+            yield {"type": "done", "final_text": final_text, "session_id": None}
+            
+        except Exception as e:
+            yield {"type": "error", "error": f"Gemini falhou: {str(e)}"}
 
     @classmethod
-    def generate_stream(cls, prompt, system_msg=None, chat_history=None, user_id=None, gcp_session_id=None):
+    def generate_stream(cls, prompt, system_msg=None, chat_history=None, user_id=None, gcp_session_id=None, mcp_connections=None):
+        
+        mcp_tools = []
+        if mcp_connections:
+            for conn in mcp_connections:
+                mcp_client = MCPClient(conn.mcp_server.url)
+                tools = mcp_client.get_tools_sync()
+                if tools:
+                    mcp_tools.extend(tools)
+                    
+            if mcp_tools:
+                system_msg += "\n\nVocê tem acesso a ferramentas de Gestão Agrícola (MCP). IMPORTANTE: Ao usar qualquer ferramenta que exija o parâmetro 'tenant_id', você deve preenchê-lo com o token cadastrado pelo usuário. Como eu não posso passar o token puro aqui por segurança, o backend injetará o tenant_id correto automaticamente, mas você pode assumir que ele existe."
+
         try:
+            # Em um cenário real, injetaríamos os mcp_tools no payload do gcp_cloud_run.
+            # Como você mencionou que podemos usar o Gemini Fallback para simplificar o MCP,
+            # vamos forçar o uso do Gemini se houver integrações MCP ativas para garantir que o function calling funcione perfeitamente via SDK.
+            if mcp_tools:
+                 print("[AI Routing] Redirecionando para Gemini devido ao uso de ferramentas MCP locais.")
+                 yield from cls._call_gemini_stream(prompt, system_msg, chat_history, mcp_tools, mcp_connections)
+                 return
+                 
             yield from cls._call_gcp_cloud_run_stream(prompt, system_msg, user_id, gcp_session_id)
         except Exception as e:
             print(f"[AI Fallback] GCP API falhou ({e}). Tentando Gemini...")
@@ -172,7 +280,7 @@ def chatbot(request, conversation_id=None):
 
         gcp_sid = conversation.gcp_session_id
         
-        system_prompt = "Você é o assistente oficial e inteligente do Governo do Estado de Mato Grosso. Seja educado, prestativo e forneça informações governamentais."
+        system_prompt = "Você é o TarsLabs WhiteLabel UI Agent, um assistente inteligente e prestativo."
 
         def stream_generator():
             # Send initial metadata so UI knows the conversation ID
@@ -181,7 +289,7 @@ def chatbot(request, conversation_id=None):
             final_text = ""
             new_gcp_sid = gcp_sid
             
-            for chunk in AIProvider.generate_stream(message, system_prompt, chat_history, request.user.username, gcp_sid):
+            for chunk in AIProvider.generate_stream(message, system_prompt, chat_history, request.user.username, gcp_sid, list(request.user.mcp_connections.all())):
                 if chunk["type"] == "done":
                     final_text = chunk["final_text"]
                     if chunk.get("session_id"):
@@ -217,6 +325,37 @@ def chatbot(request, conversation_id=None):
 @login_required(login_url='login')
 def profile(request):
     return render(request, 'chatbot/profile.html')
+
+@login_required(login_url='login')
+def integrations(request):
+    servers = MCPServer.objects.filter(is_active=True)
+    user_connections = UserMCPConnection.objects.filter(user=request.user)
+    connected_server_ids = [conn.mcp_server.id for conn in user_connections]
+
+    if request.method == 'POST':
+        server_id = request.POST.get('server_id')
+        token = request.POST.get('token')
+        action = request.POST.get('action')
+
+        try:
+            server = MCPServer.objects.get(id=server_id)
+            if action == 'connect' and token:
+                UserMCPConnection.objects.update_or_create(
+                    user=request.user,
+                    mcp_server=server,
+                    defaults={'access_token': token, 'is_connected': True}
+                )
+            elif action == 'disconnect':
+                UserMCPConnection.objects.filter(user=request.user, mcp_server=server).delete()
+            return redirect('integrations')
+        except MCPServer.DoesNotExist:
+            pass
+
+    return render(request, 'chatbot/integrations.html', {
+        'servers': servers,
+        'connected_server_ids': connected_server_ids,
+        'user_connections': {conn.mcp_server.id: conn for conn in user_connections}
+    })
 
 def login(request):
     if request.method == 'POST':
