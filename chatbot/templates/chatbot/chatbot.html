@@ -114,16 +114,16 @@
           <i class="fa-solid fa-robot"></i>
         </div>
         <h3 class="text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-2">Como posso ajudar hoje?</h3>
-        <p class="text-gray-500 dark:text-gray-400 text-sm mb-8">Faça perguntas, peça análises ou solicite informações para o assistente oficial do estado.</p>
+        <p class="text-gray-500 dark:text-gray-400 text-sm mb-8">Seu assistente virtual de inteligência agrícola e gestão de safras.</p>
         
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
-          <button onclick="document.querySelector('.message-input').value='Quais são as principais metas do governo atual?'; document.querySelector('.message-input').focus();" class="text-left bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl p-3 text-sm text-gray-700 dark:text-gray-200 transition-colors">
-            <span class="font-semibold block text-gray-800 dark:text-gray-100 mb-1">Principais Metas</span>
-            Quais são as principais metas do governo atual?
+          <button onclick="document.querySelector('.message-input').value='Consultar meu estoque de insumos'; document.querySelector('.message-input').focus();" class="text-left bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl p-3 text-sm text-gray-700 dark:text-gray-200 transition-colors">
+            <span class="font-semibold block text-gray-800 dark:text-gray-100 mb-1">Estoque e Insumos</span>
+            Consultar meu estoque de insumos
           </button>
-          <button onclick="document.querySelector('.message-input').value='Me ajude a redigir um ofício padrão.'; document.querySelector('.message-input').focus();" class="text-left bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl p-3 text-sm text-gray-700 dark:text-gray-200 transition-colors">
-            <span class="font-semibold block text-gray-800 dark:text-gray-100 mb-1">Redigir Ofício</span>
-            Me ajude a redigir um ofício padrão.
+          <button onclick="document.querySelector('.message-input').value='Como está o andamento das minhas safras ativas?'; document.querySelector('.message-input').focus();" class="text-left bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl p-3 text-sm text-gray-700 dark:text-gray-200 transition-colors">
+            <span class="font-semibold block text-gray-800 dark:text-gray-100 mb-1">Gestão de Safra</span>
+            Como está o andamento das minhas safras ativas?
           </button>
         </div>
       </div>
@@ -526,6 +526,28 @@
                               }
                               else if (data.type === 'error' || data.type === 'fatal') {
                                   console.warn("AI Fallback/Error:", data.error);
+                                  const indicator = document.querySelector('.typing-indicator');
+                                  if (indicator) indicator.remove();
+                                  
+                                  const mainIndicator = document.getElementById('main-typing-indicator');
+                                  if (mainIndicator) mainIndicator.remove();
+                                  
+                                  let markdownContainer = document.getElementById(innerContainerId + '-md');
+                                  if (!markdownContainer) {
+                                      innerContainer.insertAdjacentHTML('beforeend', `<div id="${innerContainerId}-md" class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 animate-fade-in-up markdown-rendered"></div>`);
+                                      markdownContainer = document.getElementById(innerContainerId + '-md');
+                                  }
+                                  
+                                  const errorMsg = `<div class="bg-red-50 text-red-600 p-3 rounded-lg border border-red-200 text-sm mt-2"><i class="fa-solid fa-triangle-exclamation mr-2"></i> ${data.error}</div>`;
+                                  markdownContainer.innerHTML += errorMsg;
+                                  scrollToBottom();
+                                  
+                                  // Encerrar a conexão e liberar a UI se for fatal ou erro
+                                  messageInput.disabled = false;
+                                  sendButton.disabled = false;
+                                  sendButton.innerHTML = '<i class="fa-solid fa-arrow-up"></i>';
+                                  messageInput.focus();
+                                  break;
                               }
                           } catch (e) {
                               console.error("Erro processando chunk:", e, dataStr);
