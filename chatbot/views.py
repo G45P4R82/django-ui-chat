@@ -156,8 +156,10 @@ class AIProvider:
                     for conn in mcp_connections:
                         try:
                             mcp_client = MCPClient(conn.mcp_server.url)
-                            # We inject the tenant_id explicitly if it's missing just in case, though the prompt should handle it
-                            if "tenant_id" not in arguments:
+                            # We inject the tenant_id explicitly using the tenant_id from connection
+                            if conn.tenant_id:
+                                arguments["tenant_id"] = conn.tenant_id
+                            elif "tenant_id" not in arguments:
                                 arguments["tenant_id"] = conn.access_token
                             
                             res = mcp_client.call_tool_sync(tool_name, arguments)
@@ -210,7 +212,7 @@ class AIProvider:
                     mcp_tools.extend(tools)
                     
             if mcp_tools:
-                system_msg += "\n\nVocê tem acesso a ferramentas de Gestão Agrícola (MCP). IMPORTANTE: Ao usar qualquer ferramenta que exija o parâmetro 'tenant_id', você deve preenchê-lo com o token cadastrado pelo usuário. Como eu não posso passar o token puro aqui por segurança, o backend injetará o tenant_id correto automaticamente, mas você pode assumir que ele existe."
+                system_msg += "\n\nVocê tem acesso a ferramentas de Gestão Agrícola (MCP). IMPORTANTE: Ao usar qualquer ferramenta que exija o parâmetro 'tenant_id', você DEVE preenchê-lo ESTRITAMENTE com o token cadastrado pelo usuário. O backend tentará injetar o tenant_id da fazenda do usuário se você falhar, mas por favor forneça qualquer string como placeholder se for um campo obrigatório no schema."
 
         try:
             # Em um cenário real, injetaríamos os mcp_tools no payload do gcp_cloud_run.
@@ -280,7 +282,14 @@ def chatbot(request, conversation_id=None):
 
         gcp_sid = conversation.gcp_session_id
         
-        system_prompt = "Você é o TarsLabs WhiteLabel UI Agent, um assistente inteligente e prestativo."
+        system_prompt = (
+            "Você é o TarsLabs WhiteLabel UI Agent, um assistente inteligente e prestativo.\n"
+            "Se você tiver acesso a ferramentas de Gestão Agrícola (MCP), atue como a camada de interface entre o produtor rural e o sistema.\n"
+            "SEJA SEMPRE prestativo, profissional e levemente coloquial, focado no campo.\n"
+            "VOCÊ É UM PARSER DETERMINÍSTICO: Se faltarem dados vitais para uma ferramenta (ex: qual a gleba? qual o insumo?), "
+            "NÃO ADIVINHE E NÃO INVENTE DADOS. Pergunte primeiro ao usuário.\n"
+            "Se o retorno da ferramenta indicar sucesso, avise o produtor rural de forma natural que a operação foi registrada no sistema."
+        )
 
         def stream_generator():
             # Send initial metadata so UI knows the conversation ID
@@ -334,17 +343,44 @@ def integrations(request):
 
     if request.method == 'POST':
         server_id = request.POST.get('server_id')
-        token = request.POST.get('token')
         action = request.POST.get('action')
+        mcp_username = request.POST.get('mcp_username')
+        mcp_password = request.POST.get('mcp_password')
 
         try:
             server = MCPServer.objects.get(id=server_id)
-            if action == 'connect' and token:
-                UserMCPConnection.objects.update_or_create(
-                    user=request.user,
-                    mcp_server=server,
-                    defaults={'access_token': token, 'is_connected': True}
-                )
+            if action == 'connect' and mcp_username and mcp_password:
+                # Fazer requisição real pro /auth/login do servidor MCP
+                auth_url = server.url.replace('/sse', '/auth/login')
+                try:
+                    res = requests.post(auth_url, json={"username": mcp_username, "password": mcp_password}, timeout=10)
+                    if res.status_code == 200:
+                        data = res.json()
+                        token = data.get('access_token')
+                        tenant_id = data.get('tenant_id')
+                        
+                        if token and tenant_id:
+                            UserMCPConnection.objects.update_or_create(
+                                user=request.user,
+                                mcp_server=server,
+                                defaults={'access_token': token, 'tenant_id': tenant_id, 'is_connected': True}
+                            )
+                            return redirect('integrations')
+                        else:
+                            error_message = "Resposta inválida do servidor MCP."
+                    else:
+                         error_message = "Credenciais inválidas no sistema agrícola."
+                except Exception as e:
+                     error_message = f"Erro ao conectar no servidor: {str(e)}"
+                     
+                return render(request, 'chatbot/integrations.html', {
+                    'servers': servers,
+                    'connected_server_ids': connected_server_ids,
+                    'user_connections': {conn.mcp_server.id: conn for conn in user_connections},
+                    'error_message': error_message,
+                    'error_server_id': server.id
+                })
+                
             elif action == 'disconnect':
                 UserMCPConnection.objects.filter(user=request.user, mcp_server=server).delete()
             return redirect('integrations')

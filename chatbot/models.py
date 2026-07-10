@@ -15,6 +15,7 @@ class UserMCPConnection(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='mcp_connections')
     mcp_server = models.ForeignKey(MCPServer, on_delete=models.CASCADE)
     access_token = models.CharField(max_length=512)
+    tenant_id = models.CharField(max_length=255, null=True, blank=True)
     is_connected = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
