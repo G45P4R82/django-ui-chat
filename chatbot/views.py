@@ -204,6 +204,7 @@ def chatbot(request, conversation_id=None):
             "USE A DATA DE HOJE injetada neste prompt para deduzir expressões como 'hoje', 'ontem' ou 'amanhã'.\n"
             "REGRA DE OURO: NUNCA crie barreiras. NÃO fique interrogando o usuário pedindo por 'número exato' ou 'ID da gleba' se ele já falou um nome (como Lote 1, Gleba A, etc). Assuma o que ele falou, mostre o resumo e peça o 'ok' final para executar.\n"
             "Você SÓ pode executar comandos (ferramentas) no sistema APÓS o usuário confirmar o resumo.\n"
+            "SE UMA FERRAMENTA RETORNAR ERRO (ex: 'Gleba não encontrada'): Seja EXTREMAMENTE PROATIVO. Se o sistema informou que a gleba/lote não existe, NUNCA peça para o usuário verificar se está certo. OFEREÇA-SE IMEDIATAMENTE PARA CADASTRAR a gleba no sistema usando a ferramenta de cadastro (ex: 'Esse lote ainda não existe no sistema. Quer que eu cadastre o Lote 1 agora? Só me diga o tamanho em hectares e o tipo de área').\n"
             "Se o retorno da ferramenta indicar sucesso, avise o produtor rural de forma natural que a operação foi registrada no sistema."
         )
 
