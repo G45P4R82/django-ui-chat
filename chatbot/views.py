@@ -397,6 +397,47 @@ def login(request):
     if request.method == 'POST':
         username = request.POST['username']
         password = request.POST['password']
+        
+        # 1. Tenta autenticação unificada via Servidor MCP
+        mcp_authenticated = False
+        mcp_data = None
+        server = MCPServer.objects.filter(is_active=True).first()
+        
+        if server:
+            auth_url = server.url.replace('/sse', '/auth/login')
+            try:
+                res = requests.post(auth_url, json={"username": username, "password": password}, timeout=10)
+                if res.status_code == 200:
+                    data = res.json()
+                    if data.get('access_token') and data.get('tenant_id'):
+                        mcp_authenticated = True
+                        mcp_data = data
+            except Exception as e:
+                print(f"[MCP Auth Error] Falha ao contatar {auth_url}: {e}")
+
+        if mcp_authenticated:
+            # Cria ou atualiza o usuário no Django transparente para o usuário
+            user, created = User.objects.get_or_create(username=username)
+            user.set_password(password)
+            user.save()
+            
+            # Autentica e loga
+            user = auth.authenticate(request, username=username, password=password)
+            if user:
+                auth.login(request, user)
+                # Salva a conexão para uso na IA
+                UserMCPConnection.objects.update_or_create(
+                    user=user,
+                    mcp_server=server,
+                    defaults={
+                        'access_token': mcp_data['access_token'], 
+                        'tenant_id': mcp_data['tenant_id'], 
+                        'is_connected': True
+                    }
+                )
+                return redirect('chatbot')
+
+        # 2. Fallback: Autenticação padrão do Django (garante que o 'admin' continue funcionando)
         user = auth.authenticate(request, username=username, password=password)
         if user is not None:
             auth.login(request, user)
