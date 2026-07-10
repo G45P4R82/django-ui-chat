@@ -15,40 +15,6 @@ from .mcp_client import MCPClient
 from django.utils import timezone
 
 class AIProvider:
-    GCP_URL = "https://chatbot-bot-dev-ecengx7mxa-rj.a.run.app"
-
-    @classmethod
-    def _get_gcp_headers(cls):
-        try:
-            token = subprocess.check_output(['gcloud', 'auth', 'print-identity-token']).decode().strip()
-        except Exception as e:
-            raise ValueError(f"GCP Token error: {e}")
-        return {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json"
-        }
-
-    @classmethod
-    def _get_or_create_gcp_session(cls, user_id, session_id, headers):
-        if session_id:
-            return session_id
-        res = requests.post(f"{cls.GCP_URL}/apps/bot/users/{user_id}/sessions", headers=headers, json={}, timeout=10)
-        res.raise_for_status()
-        return res.json().get('id')
-
-    @classmethod
-    def _format_mcp_tools_for_gcp(cls, mcp_tools):
-        if not mcp_tools:
-            return None
-        gemini_tools = []
-        for tool in mcp_tools:
-            gemini_tools.append({
-                "name": tool["name"],
-                "description": tool["description"],
-                "parameters": tool.get("parameters", {})
-            })
-        return [{"functionDeclarations": gemini_tools}]
-
     @classmethod
     def _execute_mcp_tool(cls, tool_name, arguments, mcp_connections):
         tool_result_text = "Tool failed."
@@ -72,150 +38,49 @@ class AIProvider:
         return tool_result_text
 
     @classmethod
-    def _parse_sse_line(cls, line):
-        decoded = line.decode('utf-8')
-        if not decoded.startswith("data: "):
-            return None
-        data_str = decoded[6:].strip()
-        if not data_str:
-            return None
-        try:
-            return json.loads(data_str)
-        except json.JSONDecodeError:
-            return None
-
-    @classmethod
-    def _process_artifacts(cls, data, user_id, session_id, headers):
-        final_text_append = ""
-        yield_items = []
-        try:
-            if "actions" in data and "artifactDelta" in data["actions"]:
-                artifacts = data["actions"]["artifactDelta"]
-                for art_name, art_version in artifacts.items():
-                    art_url = f"{cls.GCP_URL}/apps/bot/users/{user_id}/sessions/{session_id}/artifacts/{art_name}/versions/{art_version}"
-                    art_res = requests.get(art_url, headers=headers)
-                    if art_res.status_code == 200:
-                        import base64
-                        b64 = base64.b64encode(art_res.content).decode()
-                        mime = "image/png" if art_name.endswith(".png") else "image/jpeg"
-                        img_md = f"\n\n![{art_name}](data:{mime};base64,{b64})\n\n"
-                        final_text_append += img_md
-                        yield_items.append({"type": "text", "text": img_md})
-        except Exception:
-            pass
-        return final_text_append, yield_items
-
-    @classmethod
-    def _call_gcp_cloud_run_stream(cls, prompt, system_msg, user_id, session_id, mcp_tools=None, mcp_connections=None):
-        headers = cls._get_gcp_headers()
-        session_id = cls._get_or_create_gcp_session(user_id, session_id, headers)
-        
-        full_prompt = f"[{system_msg}]\n\n{prompt}" if system_msg else prompt
-        
-        payload = {
-            "app_name": "bot",
-            "user_id": user_id,
-            "session_id": session_id,
-            "new_message": {
-                "role": "user",
-                "parts": [{"text": full_prompt}]
-            }
-        }
-        
-        tools_payload = cls._format_mcp_tools_for_gcp(mcp_tools)
-        if tools_payload:
-            payload["tools"] = tools_payload
-            
-        final_text = ""
-        function_calls_queue = []
-        
-        # Pass 1: User message to GCP
-        with requests.post(f"{cls.GCP_URL}/run_sse", headers=headers, json=payload, stream=True, timeout=60) as r:
-            r.raise_for_status()
-            for line in r.iter_lines():
-                if not line: continue
-                data = cls._parse_sse_line(line)
-                if not data: continue
-                
-                text_append, artifacts_yields = cls._process_artifacts(data, user_id, session_id, headers)
-                final_text += text_append
-                for y in artifacts_yields: yield y
-                
-                parts = data.get("content", {}).get("parts", [])
-                for p in parts:
-                    if "functionCall" in p:
-                        function_calls_queue.append(p["functionCall"])
-                        yield {"type": "tool_call", "name": p["functionCall"]["name"]}
-                    if "text" in p:
-                        final_text += p["text"]
-                        yield {"type": "text", "text": p["text"]}
-                        
-        # Pass 2: Execute tools and return response to GCP
-        if function_calls_queue and mcp_connections:
-            for function_call in function_calls_queue:
-                tool_name = function_call.get("name")
-                arguments = function_call.get("args", {})
-                
-                tool_result_text = cls._execute_mcp_tool(tool_name, arguments, mcp_connections)
-                yield {"type": "tool_resp", "name": tool_name}
-                
-                func_payload = {
-                    "app_name": "bot",
-                    "user_id": user_id,
-                    "session_id": session_id,
-                    "new_message": {
-                        "role": "function",
-                        "parts": [{"functionResponse": {"name": tool_name, "response": {"result": tool_result_text}}}]
-                    }
-                }
-                
-                with requests.post(f"{cls.GCP_URL}/run_sse", headers=headers, json=func_payload, stream=True, timeout=60) as fr:
-                    fr.raise_for_status()
-                    for line in fr.iter_lines():
-                        if not line: continue
-                        data = cls._parse_sse_line(line)
-                        if not data: continue
-                        
-                        parts = data.get("content", {}).get("parts", [])
-                        for p in parts:
-                            if "text" in p:
-                                final_text += p["text"]
-                                yield {"type": "text", "text": p["text"]}
-
-        if not final_text:
-            raise ValueError("Resposta vazia da GCP")
-            
-        yield {"type": "done", "final_text": final_text, "session_id": session_id}
-
-    @classmethod
-    def _call_gemini_stream(cls, prompt, system_msg=None, chat_history=None, mcp_tools=None, mcp_connections=None):
+    def generate_stream(cls, prompt, system_msg=None, chat_history=None, user_id=None, gcp_session_id=None, mcp_connections=None):
         api_key = os.environ.get("GEMINI_API_KEY_2") or os.environ.get("GEMINI_API_KEY_3")
         
         if not api_key:
-             yield {"type": "error", "error": "Gemini API key is missing."}
+             yield {"type": "error", "error": "As chaves de API do Gemini não estão configuradas (.env)."}
              return
              
         client = genai.Client(api_key=api_key)
         
+        # Injetar regras e tools do MCP
         tools_config = []
-        if mcp_tools:
-            from google.genai import types
-            gemini_tools = []
-            for tool in mcp_tools:
-                parameters_schema = tool.get("parameters", {})
-                if "properties" in parameters_schema:
-                    gemini_tools.append(types.FunctionDeclaration(
-                        name=tool["name"],
-                        description=tool["description"],
-                        parameters=parameters_schema
-                    ))
-                else:
-                    gemini_tools.append(types.FunctionDeclaration(
-                        name=tool["name"],
-                        description=tool["description"],
-                    ))
-            if gemini_tools:
-                 tools_config = [types.Tool(function_declarations=gemini_tools)]
+        mcp_tools = []
+        
+        if mcp_connections:
+            for conn in mcp_connections:
+                try:
+                    mcp_client = MCPClient(conn.mcp_server.url)
+                    fetched_tools = mcp_client.get_tools_sync()
+                    if fetched_tools:
+                        mcp_tools.extend(fetched_tools)
+                except Exception as e:
+                    print(f"[MCP Error] Failed to fetch tools: {e}")
+                    
+            if mcp_tools:
+                system_msg += "\n\nVocê tem acesso a ferramentas de Gestão Agrícola (MCP). IMPORTANTE: Ao usar qualquer ferramenta que exija o parâmetro 'tenant_id', você DEVE preenchê-lo ESTRITAMENTE com o token cadastrado pelo usuário."
+                
+                from google.genai import types
+                gemini_tools = []
+                for tool in mcp_tools:
+                    parameters_schema = tool.get("parameters", {})
+                    if "properties" in parameters_schema:
+                        gemini_tools.append(types.FunctionDeclaration(
+                            name=tool["name"],
+                            description=tool["description"],
+                            parameters=parameters_schema
+                        ))
+                    else:
+                        gemini_tools.append(types.FunctionDeclaration(
+                            name=tool["name"],
+                            description=tool["description"],
+                        ))
+                if gemini_tools:
+                     tools_config = [types.Tool(function_declarations=gemini_tools)]
 
         full_prompt = f"[{system_msg}]\n\n" if system_msg else ""
         if chat_history:
@@ -224,6 +89,7 @@ class AIProvider:
         full_prompt += f"Usuário: {prompt}\nAssistente:"
         
         try:
+            from google.genai import types
             response = client.models.generate_content(
                 model='gemini-2.5-flash',
                 contents=full_prompt,
@@ -231,7 +97,6 @@ class AIProvider:
             )
             
             if response.function_calls:
-                from google.genai import types
                 for function_call in response.function_calls:
                     tool_name = function_call.name
                     arguments = {k: v for k, v in function_call.args.items()}
@@ -266,33 +131,7 @@ class AIProvider:
             yield {"type": "done", "final_text": final_text, "session_id": None}
             
         except Exception as e:
-            yield {"type": "error", "error": f"Gemini falhou: {str(e)}"}
-
-    @classmethod
-    def generate_stream(cls, prompt, system_msg=None, chat_history=None, user_id=None, gcp_session_id=None, mcp_connections=None):
-        mcp_tools = []
-        if mcp_connections:
-            for conn in mcp_connections:
-                try:
-                    mcp_client = MCPClient(conn.mcp_server.url)
-                    tools = mcp_client.get_tools_sync()
-                    if tools:
-                        mcp_tools.extend(tools)
-                except Exception as e:
-                    print(f"[MCP Error] Failed to fetch tools: {e}")
-                    
-            if mcp_tools:
-                system_msg += "\n\nVocê tem acesso a ferramentas de Gestão Agrícola (MCP). IMPORTANTE: Ao usar qualquer ferramenta que exija o parâmetro 'tenant_id', você DEVE preenchê-lo ESTRITAMENTE com o token cadastrado pelo usuário. O backend tentará injetar o tenant_id da fazenda do usuário se você falhar, mas por favor forneça qualquer string como placeholder se for um campo obrigatório no schema."
-
-        try:
-            yield from cls._call_gcp_cloud_run_stream(prompt, system_msg, user_id, gcp_session_id, mcp_tools, mcp_connections)
-        except Exception as e:
-            print(f"[AI Fallback] GCP API falhou ({e}). Tentando Gemini...")
-            yield {"type": "error", "error": f"GCP falhou: {e}. Usando fallback."}
-            try:
-                yield from cls._call_gemini_stream(prompt, system_msg, chat_history, mcp_tools, mcp_connections)
-            except Exception as e3:
-                yield {"type": "fatal", "error": f"Erro fatal em todos os provedores: {str(e3)}"}
+            yield {"type": "error", "error": f"Erro de processamento da IA: {str(e)}"}
 
     @classmethod
     def generate_title(cls, prompt):
@@ -306,7 +145,6 @@ class AIProvider:
             return response.text.strip()
         except:
             return "Nova Conversa"
-
 
 def ask_gemini_title(bot_response):
     user_prompt = f"Crie um título muito curto (máximo 4 palavras) que resuma este texto: '{bot_response}'. Responda apenas o título, sem aspas."
