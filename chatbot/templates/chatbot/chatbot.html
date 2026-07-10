@@ -109,23 +109,12 @@
       
       <!-- Se for um chat novo (sem histórico) -->
       {% if not chats %}
-      <div class="flex flex-col items-center justify-center h-full max-w-md mx-auto text-center animate-fade-in-up">
+      <div class="welcome-screen flex flex-col items-center justify-center h-full max-w-md mx-auto text-center animate-fade-in-up">
         <div class="w-16 h-16 bg-gray-50 dark:bg-gray-700 rounded-full border border-gray-100 dark:border-gray-600 flex items-center justify-center text-brand-600 dark:text-brand-400 text-3xl mb-4 shadow-sm">
-          <i class="fa-solid fa-robot"></i>
+          <i class="fa-solid fa-robot fa-bounce"></i>
         </div>
-        <h3 class="text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-2">Como posso ajudar hoje?</h3>
-        <p class="text-gray-500 dark:text-gray-400 text-sm mb-8">Seu assistente virtual de inteligência agrícola e gestão de safras.</p>
-        
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
-          <button onclick="document.querySelector('.message-input').value='Consultar meu estoque de insumos'; document.querySelector('.message-input').focus();" class="text-left bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl p-3 text-sm text-gray-700 dark:text-gray-200 transition-colors">
-            <span class="font-semibold block text-gray-800 dark:text-gray-100 mb-1">Estoque e Insumos</span>
-            Consultar meu estoque de insumos
-          </button>
-          <button onclick="document.querySelector('.message-input').value='Como está o andamento das minhas safras ativas?'; document.querySelector('.message-input').focus();" class="text-left bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl p-3 text-sm text-gray-700 dark:text-gray-200 transition-colors">
-            <span class="font-semibold block text-gray-800 dark:text-gray-100 mb-1">Gestão de Safra</span>
-            Como está o andamento das minhas safras ativas?
-          </button>
-        </div>
+        <h3 class="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-2">Iniciando sessão do TarsLabs Agent...</h3>
+        <p class="text-gray-500 dark:text-gray-400 text-sm mb-8">Consultando dados recentes e preparando seu resumo diário automático.</p>
       </div>
       {% endif %}
 
@@ -309,18 +298,21 @@
     messageInput.addEventListener('keydown', function(e) {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        messageForm.dispatchEvent(new Event('submit'));
+        messageForm.dispatchEvent(new Event('submit', { cancelable: true }));
       }
     });
 
     messageForm.addEventListener('submit', (event) => {
       event.preventDefault();
 
-      const message = messageInput.value.trim();
+      const rawMessage = messageInput.value;
+      const message = rawMessage.trim();
+      const isProactive = message === '__PROACTIVE_START__';
+      
       if (message.length === 0) return;
 
-      // Remove welcome screen if it's the first message
-      const welcomeScreen = document.querySelector('.animate-fade-in-up');
+      // Remove welcome screen se houver (mas de forma suave)
+      const welcomeScreen = document.querySelector('.welcome-screen');
       if (welcomeScreen && welcomeScreen.parentElement === messagesList) {
         welcomeScreen.remove();
       }
@@ -330,15 +322,17 @@
       sendButton.disabled = true;
       sendButton.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin text-sm"></i>';
 
-      // 1. Add User Message
-      const userMessageDiv = document.createElement('div');
-      userMessageDiv.className = 'flex justify-end w-full max-w-3xl mx-auto mb-6';
-      userMessageDiv.innerHTML = `
-        <div class="max-w-[85%] bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100 rounded-2xl px-5 py-3 border border-gray-200 dark:border-gray-600">
-          <div class="text-[15px] leading-relaxed break-words whitespace-pre-wrap">${message.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
-        </div>
-      `;
-      messagesList.appendChild(userMessageDiv);
+      if (!isProactive) {
+          // 1. Add User Message
+          const userMessageDiv = document.createElement('div');
+          userMessageDiv.className = 'flex justify-end w-full max-w-3xl mx-auto mb-6 animate-fade-in-up';
+          userMessageDiv.innerHTML = `
+            <div class="max-w-[85%] bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100 rounded-2xl px-5 py-3 border border-gray-200 dark:border-gray-600 shadow-sm">
+              <div class="text-[15px] leading-relaxed break-words whitespace-pre-wrap">${message.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+            </div>
+          `;
+          messagesList.appendChild(userMessageDiv);
+      }
 
       // Reset input
       messageInput.value = '';
@@ -576,6 +570,13 @@
 
       processStream();
     });
+
+    // Auto-trigger proativo se for uma nova conversa
+    const isNewChat = {% if not chats %}true{% else %}false{% endif %};
+    if (isNewChat) {
+        messageInput.value = '__PROACTIVE_START__';
+        messageForm.dispatchEvent(new Event('submit', { cancelable: true }));
+    }
   });
 </script>
 

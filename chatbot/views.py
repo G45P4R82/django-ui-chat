@@ -328,7 +328,7 @@ def chatbot(request, conversation_id=None):
         chats = []
 
     if request.method == 'POST':
-        message = request.POST.get('message')
+        raw_message = request.POST.get('message')
         conv_id = request.POST.get('conversation_id')
         
         chat_history = []
@@ -357,6 +357,27 @@ def chatbot(request, conversation_id=None):
             "Se o retorno da ferramenta indicar sucesso, avise o produtor rural de forma natural que a operação foi registrada no sistema."
         )
 
+        db_message = raw_message
+        message_to_ai = raw_message
+
+        if raw_message == '__PROACTIVE_START__':
+            db_message = "Resumo Diário Automático"
+            has_mcp = request.user.mcp_connections.exists()
+            if has_mcp:
+                message_to_ai = (
+                    "AJA PROATIVAMENTE AGORA (Modo de Inicialização do App). "
+                    "1. Dê 'Bom dia/Boa tarde/Boa noite' para mim. "
+                    "2. CHAME IMEDIATAMENTE a ferramenta `mcp_consultar_safras_ativas` (injetando o tenant_id). "
+                    "3. Apresente um resumo rápido e empolgante sobre o status da minha fazenda. "
+                    "4. Finalize perguntando se quero registrar alguma atividade ou despesa hoje."
+                )
+            else:
+                message_to_ai = (
+                    "AJA PROATIVAMENTE AGORA (Modo de Inicialização do App). "
+                    "1. Dê 'Bom dia/Boa tarde/Boa noite' para mim. "
+                    "2. Diga que percebeu que eu ainda não conectei o sistema de gestão agrícola na aba 'Integrações MCP', e que você precisa disso para gerar os relatórios diários automáticos da minha fazenda."
+                )
+
         def stream_generator():
             # Send initial metadata so UI knows the conversation ID
             yield f"data: {json.dumps({'type': 'metadata', 'conversation_id': conversation.id, 'is_new': (conv_id is None)})}\n\n"
@@ -364,7 +385,7 @@ def chatbot(request, conversation_id=None):
             final_text = ""
             new_gcp_sid = gcp_sid
             
-            for chunk in AIProvider.generate_stream(message, system_prompt, chat_history, request.user.username, gcp_sid, list(request.user.mcp_connections.all())):
+            for chunk in AIProvider.generate_stream(message_to_ai, system_prompt, chat_history, request.user.username, gcp_sid, list(request.user.mcp_connections.all())):
                 if chunk["type"] == "done":
                     final_text = chunk["final_text"]
                     if chunk.get("session_id"):
@@ -385,7 +406,7 @@ def chatbot(request, conversation_id=None):
                 conversation.updated_at = timezone.now()
                 conversation.save()
                 
-                Chat.objects.create(user=request.user, conversation=conversation, message=message, response=final_text)
+                Chat.objects.create(user=request.user, conversation=conversation, message=db_message, response=final_text)
 
             yield "data: [DONE]\n\n"
 
