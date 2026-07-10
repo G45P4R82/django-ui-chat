@@ -68,6 +68,15 @@ class AIProvider:
                 gemini_tools = []
                 for tool in mcp_tools:
                     parameters_schema = tool.get("parameters", {})
+                    
+                    # Gemini API doesn't support 'additionalProperties' or 'additional_properties' in its OpenAPI schema strict validation
+                    if isinstance(parameters_schema, dict):
+                        # Remove additionalProperties if it exists
+                        if "additionalProperties" in parameters_schema:
+                            del parameters_schema["additionalProperties"]
+                        if "additional_properties" in parameters_schema:
+                            del parameters_schema["additional_properties"]
+                            
                     if "properties" in parameters_schema:
                         gemini_tools.append(types.FunctionDeclaration(
                             name=tool["name"],
@@ -115,18 +124,18 @@ class AIProvider:
                     follow_up_response = client.models.generate_content(
                          model='gemini-2.5-flash',
                          contents=[
-                             types.Content(role="user", parts=[types.Part.from_text(full_prompt)]),
+                             types.Content(role="user", parts=[types.Part.from_text(text=full_prompt)]),
                              types.Content(role="model", parts=response.parts),
                              types.Content(role="user", parts=[function_response_part])
                          ]
                     )
                     
-                    final_text = follow_up_response.text.strip()
+                    final_text = follow_up_response.text.strip() if follow_up_response.text else ''
                     yield {"type": "text", "text": final_text}
                     yield {"type": "done", "final_text": final_text, "session_id": None}
                     return
 
-            final_text = response.text.strip()
+            final_text = response.text.strip() if response.text else ''
             yield {"type": "text", "text": final_text}
             yield {"type": "done", "final_text": final_text, "session_id": None}
             
@@ -142,7 +151,7 @@ class AIProvider:
                 model='gemini-2.5-flash',
                 contents=prompt,
             )
-            return response.text.strip()
+            return response.text.strip() if response.text else 'Nova Conversa'
         except:
             return "Nova Conversa"
 
@@ -190,8 +199,10 @@ def chatbot(request, conversation_id=None):
             "Você é o TarsLabs WhiteLabel UI Agent, um assistente inteligente e prestativo focado no campo.\n"
             "Se você tiver acesso a ferramentas de Gestão Agrícola (MCP), atue como a camada de interface entre o produtor rural e o sistema.\n"
             "SEJA SEMPRE prestativo, profissional e levemente coloquial.\n"
-            "VOCÊ É UM PARSER DETERMINÍSTICO: Se faltarem dados vitais para uma ferramenta (ex: qual a gleba? qual o insumo?), "
-            "NÃO ADIVINHE E NÃO INVENTE DADOS. Pergunte primeiro ao usuário.\n"
+            "COMO AGIR COM INTENÇÕES DE USUÁRIO: Se o usuário pedir para registrar, iniciar, encerrar ou cadastrar algo (ex: 'plantei soja', 'comprei adubo'), "
+            "NÃO CHAME NENHUMA FERRAMENTA AINDA. Primeiro, extraia todas as informações do texto dele, organize de forma clara (mostrando o que você entendeu), "
+            "indique quais dados estão faltando (ex: id da gleba, data exata) e PEÇA APROVAÇÃO do usuário ANTES de rodar qualquer comando no sistema.\n"
+            "Você SÓ pode executar comandos (ferramentas) no sistema APÓS o usuário confirmar o resumo organizado que você enviou.\n"
             "Se o retorno da ferramenta indicar sucesso, avise o produtor rural de forma natural que a operação foi registrada no sistema."
         )
 
